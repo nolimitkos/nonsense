@@ -269,22 +269,6 @@ function Neverlose_Main:GetDistance(player_pos, Endpoint)
     return Magnitude
 end
 
-function Neverlose_Main:GetPlayerImage(ID)
-    local width = 420
-    local height = 420
-    local format = "png"
-
-    local imageUrl = string.format(
-        "https://www.roblox.com/headshot-thumbnail/image?userId=%d&width=%d&height=%d&format=%s",
-        ID,
-        width,
-        height,
-        format
-    )
-
-    return imageUrl
-end
-
 function Neverlose_Main:SetCFG(name)
     Neverlose_Main.Targeted_Config = name
 end
@@ -297,25 +281,6 @@ function Neverlose_Main:LoadSettings(Folder, CFGName)
     writefile(Folder .. "/settings.txt", tostring(Neverlose_Main.HttpService:JSONEncode(Decoded)))
 
     Neverlose_Main.Settings = Neverlose_Main.HttpService:JSONDecode(readfile(Folder .. "/settings.txt"))
-end
-
-function Neverlose_Main:AutoJoinDiscord(DiscordCode)
-    local req = (syn and syn.request) or (http and http.request) or http_request
-    if req then
-        req({
-            Url = 'http://127.0.0.1:6463/rpc?v=1',
-            Method = 'POST',
-            Headers = {
-                ['Content-Type'] = 'application/json',
-                Origin = 'https://discord.com'
-            },
-            Body = Neverlose_Main.HttpService:JSONEncode({
-                cmd = 'INVITE_BROWSER',
-                nonce = Neverlose_Main.HttpService:GenerateGUID(false),
-                args = {code = DiscordCode}
-            })
-        })
-    end
 end
 
 function ChangeTypeText(object)
@@ -961,7 +926,7 @@ function Neverlose_Main:Window(config)
     PlayerImage.BorderSizePixel = 0
     PlayerImage.Position = UDim2.new(0.0643564388, 0, 9, 0)
     PlayerImage.Size = UDim2.new(0, 44, 0, 44)
-    PlayerImage.Image = Neverlose_Main:GetPlayerImage(Player.UserId)
+    PlayerImage.Image = ""
     
     PlayerImageCorner.CornerRadius = UDim.new(1, 0)
     PlayerImageCorner.Name = "PlayerImageCorner"
@@ -997,7 +962,6 @@ function Neverlose_Main:Window(config)
     IDNUM.TextColor3 = Color3.fromRGB(21, 160, 211)
     IDNUM.TextSize = 13
     IDNUM.TextXAlignment = Enum.TextXAlignment.Left
-    game:HttpGet("http://mana42138.pythonanywhere.com/plususer")
     UserName.Name = "UserName"
     UserName.Parent = PlayerTabLine
     UserName.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
@@ -1075,7 +1039,7 @@ function Neverlose_Main:Window(config)
     SearchIcon.BorderSizePixel = 0
     SearchIcon.Position = UDim2.new(-0.0882275626, 0, 0.121212125, 0)
     SearchIcon.Size = UDim2.new(0, 25, 0, 25)
-    SearchIcon.Image = "http://www.roblox.com/asset/?id=6031154871"
+    SearchIcon.Image = "https://www.roblox.com/asset/?id=6031154871"
     SearchIcon.ImageTransparency = 0.390
     SearchIcon.Visible = false
     
@@ -1117,7 +1081,7 @@ function Neverlose_Main:Window(config)
     Settings.BorderSizePixel = 0
     Settings.Position = UDim2.new(0.421052635, 0, 0.194444448, 0)
     Settings.Size = UDim2.new(0, 23, 0, 22)
-    Settings.Image = "http://www.roblox.com/asset/?id=6031280882"
+    Settings.Image = "https://www.roblox.com/asset/?id=6031280882"
 
     Settings.MouseButton1Click:Connect(function()
         
@@ -1133,7 +1097,7 @@ function Neverlose_Main:Window(config)
     Search.BorderSizePixel = 0
     Search.Position = UDim2.new(0.726315796, 0, 0.194444448, 0)
     Search.Size = UDim2.new(0, 22, 0, 22)
-    Search.Image = "http://www.roblox.com/asset/?id=6031154871"
+    Search.Image = "https://www.roblox.com/asset/?id=6031154871"
 
     local SearchToggled = false
 
@@ -1204,7 +1168,7 @@ function Neverlose_Main:Window(config)
     SaveIcon.BorderSizePixel = 0
     SaveIcon.Position = UDim2.new(-0.0833333358, 0, 0.138888896, 0)
     SaveIcon.Size = UDim2.new(0, 24, 0, 25)
-    SaveIcon.Image = "http://www.roblox.com/asset/?id=6035067857"
+    SaveIcon.Image = "https://www.roblox.com/asset/?id=6035067857"
     SaveIcon.ImageColor3 = Color3.fromRGB(184, 184, 184)
     
     SaveCFGPadding.Name = "SaveCFGPadding"
@@ -1287,7 +1251,7 @@ function Neverlose_Main:Window(config)
         local Title = cfg.Title
         local text = cfg.Text
         local Time = cfg.Time or 2
-        local CustomImg = cfg.Image or "http://www.roblox.com/asset/?id=6031280882"
+        local CustomImg = cfg.Image or "https://www.roblox.com/asset/?id=6031280882"
         local AutoClose = true
 
         local NotifyFrame = Instance.new("Frame")
@@ -1807,7 +1771,7 @@ function Neverlose_Main:Window(config)
     LuaButtonCode.BorderSizePixel = 0
     LuaButtonCode.Position = UDim2.new(0.675213695, 0, 0.121649489, 0)
     LuaButtonCode.Size = UDim2.new(0, 28, 0, 28)
-    LuaButtonCode.Image = "http://www.roblox.com/asset/?id=6022668955"
+    LuaButtonCode.Image = "https://www.roblox.com/asset/?id=6022668955"
 
     LuaButton.MouseButton1Click:Connect(function()
         
@@ -1852,7 +1816,7 @@ function Neverlose_Main:Window(config)
     ChatButtonChat.BorderSizePixel = 0
     ChatButtonChat.Position = UDim2.new(0.726495743, 0, 0.280721575, 0)
     ChatButtonChat.Size = UDim2.new(0, 22, 0, 21)
-    ChatButtonChat.Image = "http://www.roblox.com/asset/?id=6035181869"
+    ChatButtonChat.Image = "https://www.roblox.com/asset/?id=6035181869"
     
     CloseSettings.Name = "CloseSettings"
     CloseSettings.Parent = SettingsFrame
@@ -1954,7 +1918,7 @@ function Neverlose_Main:Window(config)
         WriteScript.BorderSizePixel = 0
         WriteScript.Position = UDim2.new(0.850000024, 0, 0.00999999978, 0)
         WriteScript.Size = UDim2.new(0, 20, 0, 20)
-        WriteScript.Image = "http://www.roblox.com/asset/?id=6034328955"
+        WriteScript.Image = "https://www.roblox.com/asset/?id=6034328955"
         WriteScript.ImageColor3 = Color3.fromRGB(46, 125, 194)
 
         WriteScript.MouseButton1Click:Connect(function()
@@ -2083,7 +2047,7 @@ function Neverlose_Main:Window(config)
         RefreshScripts.BorderSizePixel = 0
         RefreshScripts.Position = UDim2.new(0.91, 0, 0.005, 0)
         RefreshScripts.Size = UDim2.new(0, 25, 0, 25)
-        RefreshScripts.Image = "http://www.roblox.com/asset/?id=6031097226"
+        RefreshScripts.Image = "https://www.roblox.com/asset/?id=6031097226"
         RefreshScripts.ImageColor3 = Color3.fromRGB(46, 125, 194)
 
         local ListScripts = listfiles(Folder.."/Scripts")
@@ -2254,7 +2218,7 @@ function Neverlose_Main:Window(config)
                 LoadImage.BorderSizePixel = 0
                 LoadImage.Position = UDim2.new(0, 0, 0.100000001, 0)
                 LoadImage.Size = UDim2.new(0, 30, 0, 23)
-                LoadImage.Image = "http://www.roblox.com/asset/?id=6026663699"
+                LoadImage.Image = "https://www.roblox.com/asset/?id=6026663699"
                 
                 ScriptSettings.Name = "ScriptSettings"
                 ScriptSettings.Parent = Script
@@ -2264,7 +2228,7 @@ function Neverlose_Main:Window(config)
                 ScriptSettings.BorderSizePixel = 0
                 ScriptSettings.Position = UDim2.new(0.768745601, 0, 0.295454532, 0)
                 ScriptSettings.Size = UDim2.new(0, 18, 0, 18)
-                ScriptSettings.Image = "http://www.roblox.com/asset/?id=6031280882"
+                ScriptSettings.Image = "https://www.roblox.com/asset/?id=6031280882"
                 local ScriptSettignsToggled = false
 
                 ScriptSettings.MouseButton1Click:Connect(function()
@@ -2299,7 +2263,7 @@ function Neverlose_Main:Window(config)
                 DeleteLua.BorderSizePixel = 0
                 DeleteLua.Position = UDim2.new(0.0216450226, 0, 0.103448279, 0)
                 DeleteLua.Size = UDim2.new(0, 20, 0, 20)
-                DeleteLua.Image = "http://www.roblox.com/asset/?id=6035067843"
+                DeleteLua.Image = "https://www.roblox.com/asset/?id=6035067843"
                 DeleteLua.ImageColor3 = Color3.fromRGB(255, 69, 72)
         
                 DeleteLua.MouseButton1Click:Connect(function()
@@ -2341,7 +2305,7 @@ function Neverlose_Main:Window(config)
                 EditScript.BorderSizePixel = 0
                 EditScript.Position = UDim2.new(0.0216450226, 0, 0.103448279, 0)
                 EditScript.Size = UDim2.new(0, 20, 0, 20)
-                EditScript.Image = "http://www.roblox.com/asset/?id=6034328955"
+                EditScript.Image = "https://www.roblox.com/asset/?id=6034328955"
                 EditScript.ImageColor3 = Color3.fromRGB(16, 76, 141)
         
                 EditScript.MouseButton1Click:Connect(function()
@@ -2362,7 +2326,7 @@ function Neverlose_Main:Window(config)
                 ShareScript.BorderSizePixel = 0
                 ShareScript.Position = UDim2.new(0.0216450226, 0, 0.103448279, 0)
                 ShareScript.Size = UDim2.new(0, 20, 0, 20)
-                ShareScript.Image = "http://www.roblox.com/asset/?id=6034230648"
+                ShareScript.Image = "https://www.roblox.com/asset/?id=6034230648"
                 ShareScript.ImageColor3 = Color3.fromRGB(16, 76, 141)
         
                 ShareScript.MouseButton1Click:Connect(function()
@@ -2530,7 +2494,7 @@ function Neverlose_Main:Window(config)
             LoadImage.BorderSizePixel = 0
             LoadImage.Position = UDim2.new(0, 0, 0.100000001, 0)
             LoadImage.Size = UDim2.new(0, 30, 0, 23)
-            LoadImage.Image = "http://www.roblox.com/asset/?id=6026663699"
+            LoadImage.Image = "https://www.roblox.com/asset/?id=6026663699"
             
             ScriptSettings.Name = "ScriptSettings"
             ScriptSettings.Parent = Script
@@ -2540,7 +2504,7 @@ function Neverlose_Main:Window(config)
             ScriptSettings.BorderSizePixel = 0
             ScriptSettings.Position = UDim2.new(0.768745601, 0, 0.295454532, 0)
             ScriptSettings.Size = UDim2.new(0, 18, 0, 18)
-            ScriptSettings.Image = "http://www.roblox.com/asset/?id=6031280882"
+            ScriptSettings.Image = "https://www.roblox.com/asset/?id=6031280882"
 
             local ScriptSettignsToggled = false
 
@@ -2576,7 +2540,7 @@ function Neverlose_Main:Window(config)
             DeleteLua.BorderSizePixel = 0
             DeleteLua.Position = UDim2.new(0.0216450226, 0, 0.103448279, 0)
             DeleteLua.Size = UDim2.new(0, 20, 0, 20)
-            DeleteLua.Image = "http://www.roblox.com/asset/?id=6035067843"
+            DeleteLua.Image = "https://www.roblox.com/asset/?id=6035067843"
             DeleteLua.ImageColor3 = Color3.fromRGB(255, 69, 72)
     
             DeleteLua.MouseButton1Click:Connect(function()
@@ -2618,7 +2582,7 @@ function Neverlose_Main:Window(config)
             EditScript.BorderSizePixel = 0
             EditScript.Position = UDim2.new(0.0216450226, 0, 0.103448279, 0)
             EditScript.Size = UDim2.new(0, 20, 0, 20)
-            EditScript.Image = "http://www.roblox.com/asset/?id=6034328955"
+            EditScript.Image = "https://www.roblox.com/asset/?id=6034328955"
             EditScript.ImageColor3 = Color3.fromRGB(16, 76, 141)
     
             EditScript.MouseButton1Click:Connect(function()
@@ -2639,7 +2603,7 @@ function Neverlose_Main:Window(config)
             ShareScript.BorderSizePixel = 0
             ShareScript.Position = UDim2.new(0.0216450226, 0, 0.103448279, 0)
             ShareScript.Size = UDim2.new(0, 20, 0, 20)
-            ShareScript.Image = "http://www.roblox.com/asset/?id=6034230648"
+            ShareScript.Image = "https://www.roblox.com/asset/?id=6034230648"
             ShareScript.ImageColor3 = Color3.fromRGB(16, 76, 141)
     
             ShareScript.MouseButton1Click:Connect(function()
@@ -2785,99 +2749,6 @@ function Neverlose_Main:Window(config)
         ChatFramePadding.PaddingTop = UDim.new(0, 10)
 
         getgenv().processedMessages = {}
-
-        -- local loop = coroutine.create(function()
-        --     while wait(math.random(1, 2)) do
-        --         local data = req({
-        --             Url = "https://chatting.madsbrriinckbas.repl.co/api/poll/",
-        --             Method = "GET"
-        --         })
-        --         local data = Neverlose_Main.HttpService:JSONDecode(data.Body)
-        --         for i,v in pairs(data.messages) do
-        --             if not getgenv().processedMessages[v.uid] then
-        --                 getgenv().processedMessages[v.uid] = true -- Mark the message as processed
-
-        --                 local ChatSocketFrame = Instance.new("Frame")
-        --                 local ChatText = Instance.new("TextLabel")
-        --                 local ChatSocketFrameCorner = Instance.new("UICorner")
-        --                 local NameText = Instance.new("TextLabel")
-        --                 local NameTextCorner = Instance.new("UICorner")
-
-        --                 ChatSocketFrame.Name = "ChatSocketFrame"
-        --                 ChatSocketFrame.Parent = ChatFrameFrame --game:GetService("CoreGui").Neverlose1.MainFrame.ChatFrame.ChatFrameFrame
-        --                 ChatSocketFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-        --                 ChatSocketFrame.BackgroundTransparency = 1.000
-        --                 ChatSocketFrame.BorderColor3 = Color3.fromRGB(0, 0, 0)
-        --                 ChatSocketFrame.BorderSizePixel = 0
-        --                 ChatSocketFrame.Position = UDim2.new(0, 0, -1.08218359e-07, 0)
-        --                 ChatSocketFrame.Size = UDim2.new(0, 407, 0, 35)
-
-        --                 local ChatSocketFrameStroke = Instance.new("UIStroke")
-        
-        --                 ChatSocketFrameStroke.Color = Color3.fromRGB(49, 100, 177)
-        --                 ChatSocketFrameStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-        --                 ChatSocketFrameStroke.LineJoinMode = Enum.LineJoinMode.Round
-        --                 ChatSocketFrameStroke.Thickness = 1
-        --                 ChatSocketFrameStroke.Parent = ChatSocketFrame
-        --                 ChatSocketFrameStroke.Transparency = 0.35
-
-        --                 ChatText.Name = "ChatText"
-        --                 ChatText.Parent = ChatSocketFrame
-        --                 ChatText.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-        --                 ChatText.BackgroundTransparency = 1.000
-        --                 ChatText.BorderColor3 = Color3.fromRGB(0, 0, 0)
-        --                 ChatText.BorderSizePixel = 0
-        --                 ChatText.Position = UDim2.new(0.0270270277, 0, 0.297147036, 0)
-        --                 ChatText.Size = UDim2.new(0, 41, 0, 16)
-        --                 ChatText.Font = Enum.Font.Gotham
-        --                 ChatText.Text = tostring(v.msg)
-        --                 ChatText.TextColor3 = Color3.fromRGB(255, 255, 255)
-        --                 ChatText.TextSize = 14.000
-        --                 ChatText.TextXAlignment = Enum.TextXAlignment.Left
-        --                 ChatText.RichText = true
-                        
-        --                 ChatSocketFrameCorner.CornerRadius = UDim.new(0, 3)
-        --                 ChatSocketFrameCorner.Name = "ChatSocketFrameCorner"
-        --                 ChatSocketFrameCorner.Parent = ChatSocketFrame
-
-        --                 NameText.Name = "NameText"
-        --                 NameText.Parent = ChatSocketFrame
-        --                 NameText.BackgroundColor3 = Color3.fromRGB(14, 14, 21)
-        --                 NameText.BorderColor3 = Color3.fromRGB(0, 0, 0)
-        --                 NameText.BorderSizePixel = 0
-        --                 NameText.Position = UDim2.new(0.0489999838, 0, -0.229999647, 0)
-        --                 NameText.Size = UDim2.new(0, 66, 0, 14)
-        --                 NameText.Font = Enum.Font.SourceSans
-        --                 NameText.TextColor3 = Color3.fromRGB(255, 255, 255)
-        --                 NameText.TextSize = 14.000
-        --                 NameText.RichText = true
-
-        --                 if Player.UserId == 2254026356 then
-        --                     NameText.Text = "<font color='rgb(255,60,60)'>"..Player.Name.."</font>"
-        --                 else
-        --                     NameText.Text = "<font color='rgb(60,60,255)'>"..Player.Name.."</font>"
-        --                 end
-
-        --                 NameText.Size = UDim2.new(0, NameText.TextBounds.X + 20, 0, 14)
-
-        --                 local NameTextStroke = Instance.new("UIStroke")
-        
-        --                 NameTextStroke.Color = Color3.fromRGB(49, 100, 177)
-        --                 NameTextStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-        --                 NameTextStroke.LineJoinMode = Enum.LineJoinMode.Round
-        --                 NameTextStroke.Thickness = 1
-        --                 NameTextStroke.Parent = NameText
-        --                 NameTextStroke.Transparency = 0.35
-                        
-        --                 NameTextCorner.Name = "NameTextCorner"
-        --                 NameTextCorner.Parent = NameText
-
-        --                 ChatFrameFrame.CanvasSize = UDim2.new(0, 0, 0, ChatFrameLayout.AbsoluteContentSize.Y + 30)
-        --             end
-        --         end
-        --     end
-        -- end)
-        -- coroutine.resume(loop)
         
         ClearChat.Name = "ClearChat"
         ClearChat.Parent = ChatFrame
@@ -2887,7 +2758,7 @@ function Neverlose_Main:Window(config)
         ClearChat.BorderSizePixel = 0
         ClearChat.Position = UDim2.new(0.898000002, 0, 0.00499999989, 0)
         ClearChat.Size = UDim2.new(0, 25, 0, 25)
-        ClearChat.Image = "http://www.roblox.com/asset/?id=6035181870"
+        ClearChat.Image = "https://www.roblox.com/asset/?id=6035181870"
         ClearChat.ImageColor3 = Color3.fromRGB(46, 125, 194)
 
         ClearChat.MouseButton1Click:Connect(function()
@@ -2916,17 +2787,6 @@ function Neverlose_Main:Window(config)
 
         ChatBoxText.FocusLost:Connect(function(ep)
             if ep then
-                local Data = Neverlose_Main.HttpService:JSONEncode({
-                    msg = ChatBoxText.Text
-                })
-                req({
-                    Url = "https://chatting.madsbrriinckbas.repl.co/api/send/",
-                    Method = 'POST',
-                    Body = Data,
-                    Headers = {
-                        ['Content-Type'] = 'application/json'
-                    }
-                })
                 ChatBoxText.Text = ""
             end
         end)
@@ -2947,22 +2807,10 @@ function Neverlose_Main:Window(config)
         SendChatButton.BorderSizePixel = 0
         SendChatButton.Position = UDim2.new(0.925999999, 0, 0.163000003, 0)
         SendChatButton.Size = UDim2.new(0, 25, 0, 25)
-        SendChatButton.Image = "http://www.roblox.com/asset/?id=6035067832"
+        SendChatButton.Image = "https://www.roblox.com/asset/?id=6035067832"
         SendChatButton.ImageColor3 = Color3.fromRGB(46, 125, 194)
 
         SendChatButton.MouseButton1Click:Connect(function()
-            
-            local Data = Neverlose_Main.HttpService:JSONEncode({
-                msg = ChatBoxText.Text
-            })
-            req({
-                Url = "https://chatting.madsbrriinckbas.repl.co/api/send/",
-                Method = 'POST',
-                Body = Data,
-                Headers = {
-                    ['Content-Type'] = 'application/json'
-                }
-            })
             ChatBoxText.Text = ""
         end)
         
@@ -2974,8 +2822,6 @@ function Neverlose_Main:Window(config)
         ChatFrameLine_2.BorderSizePixel = 0
         ChatFrameLine_2.Position = UDim2.new(-0.00185185182, 0, 0.818330586, 0)
         ChatFrameLine_2.Size = UDim2.new(1, 0, 0, 1)
-
-        spawn(function()task.wait(.5)Neverlose_Main:AutoJoinDiscord("qq6WgyMwkw")end)
 
     local TabsSec = {}
     function TabsSec:TSection(title)
@@ -3804,7 +3650,7 @@ function Neverlose_Main:Window(config)
                     Arrow.BorderSizePixel = 0
                     Arrow.Position = UDim2.new(0.790000021, 0, -0.13333334, 0)
                     Arrow.Size = UDim2.new(0, 18, 0, 18)
-                    Arrow.Image = "http://www.roblox.com/asset/?id=6034818372"
+                    Arrow.Image = "https://www.roblox.com/asset/?id=6034818372"
                     
                     ItemSelected.Name = "ItemSelected"
                     ItemSelected.Parent = DropdownFrame
@@ -4654,7 +4500,7 @@ function Neverlose_Main:Window(config)
                     ColorSelection.BorderSizePixel = 0
                     ColorSelection.Position = UDim2.new(0.100689769, 0, 0.0940044597, 0)
                     ColorSelection.Size = UDim2.new(0, 18, 0, 18)
-                    ColorSelection.Image = "http://www.roblox.com/asset/?id=4805639000"
+                    ColorSelection.Image = "https://www.roblox.com/asset/?id=4805639000"
                     
                     Hue.Name = "Hue"
                     Hue.Parent = ColorPFrame
@@ -4680,7 +4526,7 @@ function Neverlose_Main:Window(config)
                     HueSelection.BorderSizePixel = 0
                     HueSelection.Position = UDim2.new(0.48, 0, 1 - select(1, Color3.toHSV(preset)))
                     HueSelection.Size = UDim2.new(0, 18, 0, 18)
-                    HueSelection.Image = "http://www.roblox.com/asset/?id=4805639000"
+                    HueSelection.Image = "https://www.roblox.com/asset/?id=4805639000"
                     
                     HueGradient.Name = "HueGradient"
                     HueGradient.Parent = Hue
@@ -5123,7 +4969,7 @@ function Neverlose_Main:Window(config)
                     AddBindImage.BorderSizePixel = 0
                     AddBindImage.Position = UDim2.new(-0.0709379092, 0, 0.150000006, 0)
                     AddBindImage.Size = UDim2.new(0, 15, 0, 15)
-                    AddBindImage.Image = "http://www.roblox.com/asset/?id=6035047391"
+                    AddBindImage.Image = "https://www.roblox.com/asset/?id=6035047391"
                     
                     AddBindPadding.Name = "AddBindPadding"
                     AddBindPadding.Parent = AddBind
@@ -5191,7 +5037,7 @@ function Neverlose_Main:Window(config)
                         BindSettingImage.BorderSizePixel = 0
                         BindSettingImage.Position = UDim2.new(0.911746085, 0, 0.200000003, 0)
                         BindSettingImage.Size = UDim2.new(0, 14, 0, 14)
-                        BindSettingImage.Image = "http://www.roblox.com/asset/?id=6031091008"
+                        BindSettingImage.Image = "https://www.roblox.com/asset/?id=6031091008"
 
                         for i,v in pairs(BindsList:GetChildren()) do
                             if v:IsA("TextButton") then
@@ -5528,7 +5374,7 @@ function Neverlose_Main:Window(config)
                         DeletionButton.BorderSizePixel = 0
                         DeletionButton.Position = UDim2.new(0.1875, 0, 0, 0)
                         DeletionButton.Size = UDim2.new(0, 17, 0, 17)
-                        DeletionButton.Image = "http://www.roblox.com/asset/?id=6022668885"
+                        DeletionButton.Image = "https://www.roblox.com/asset/?id=6022668885"
                         DeletionButton.ImageColor3 = Color3.fromRGB(79, 111, 200)
 
                         DeletionButton.MouseEnter:Connect(function()
@@ -5640,7 +5486,7 @@ function Neverlose_Main:Window(config)
                         BindSettingImage.BorderSizePixel = 0
                         BindSettingImage.Position = UDim2.new(0.911746085, 0, 0.200000003, 0)
                         BindSettingImage.Size = UDim2.new(0, 14, 0, 14)
-                        BindSettingImage.Image = "http://www.roblox.com/asset/?id=6031091008"
+                        BindSettingImage.Image = "https://www.roblox.com/asset/?id=6031091008"
 
                         for i,v in pairs(BindsList:GetChildren()) do
                             if v:IsA("TextButton") then
@@ -5993,7 +5839,7 @@ function Neverlose_Main:Window(config)
                         DeletionButton.BorderSizePixel = 0
                         DeletionButton.Position = UDim2.new(0.1875, 0, 0, 0)
                         DeletionButton.Size = UDim2.new(0, 17, 0, 17)
-                        DeletionButton.Image = "http://www.roblox.com/asset/?id=6022668885"
+                        DeletionButton.Image = "https://www.roblox.com/asset/?id=6022668885"
                         DeletionButton.ImageColor3 = Color3.fromRGB(79, 111, 200)
 
                         DeletionButton.MouseEnter:Connect(function()
