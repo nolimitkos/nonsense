@@ -704,7 +704,11 @@ Aspect.AspectRatio = 1.4
 		end
 
 		if gname then GameName.Text = gname else GameName.Text = "Unknown Game" end
-		if gicon then GameIcon.Image = gicon end
+		if gicon then
+			GameIcon.Image = gicon
+		else
+			GameIcon.Image = "https://www.roblox.com/asset-thumbnail/image?assetId=" .. tostring(game.PlaceId) .. "&width=420&height=420&format=Png&bust=" .. tostring(os.time())
+		end
 
 		local function refreshPlaying()
 			if gplaying then
@@ -1866,20 +1870,17 @@ UIAspectRatioConstraint.Parent = ImageLabel
 
 	local CloseBtn = New("TextButton", {
 		Name = "CloseButton",
-		Position = UDim2.new(0.918, 0, 0.15, 0),
-		Size = UDim2.new(0.058, 0, 0.62, 0),
-		BackgroundColor3 = Color3.fromRGB(16,19,28),
-		BackgroundTransparency = 0.35,
+		Position = UDim2.new(0.915, 0, 0.13, 0),
+		Size = UDim2.new(0.062, 0, 0.66, 0),
+		BackgroundTransparency = 1,
 		Text = "•   •   •",
 		TextColor3 = Color3.fromRGB(255,255,255),
 		TextScaled = true,
 		Font = Enum.Font.SourceSansSemibold,
 		ZIndex = 20,
 	}, Header)
-	New("UICorner", { CornerRadius = UDim.new(0, 8) }, CloseBtn)
-	New("UIStroke", { Color = Color3.fromRGB(255,255,255), Transparency = 0.92, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, CloseBtn)
 	local CloseBtnAspect = Instance.new("UIAspectRatioConstraint")
-	CloseBtnAspect.AspectRatio = 1.7
+	CloseBtnAspect.AspectRatio = 1.9
 	CloseBtnAspect.Parent = CloseBtn
 
 	local _configs = {} -- { name=string, data=table }
@@ -2845,8 +2846,43 @@ Line9.Parent = MainFrame
 	Line4.Parent = MainFrame
 
 	
-	MakeDraggable(Header, MainFrame)
-	MakeDraggable(ImageLabel, MainFrame)
+	do
+		local dragging = false
+		local dragInput, startPos, startInputPos
+		local function overInteractive()
+			local mp = UserInputService:GetMouseLocation()
+			for _, obj in ipairs(MainFrame:GetDescendants()) do
+				if obj.Visible and (obj:IsA("GuiButton") or obj:IsA("TextBox")) then
+					local ap, asz = obj.AbsolutePosition, obj.AbsoluteSize
+					if mp.X >= ap.X and mp.X <= ap.X + asz.X and mp.Y >= ap.Y and mp.Y <= ap.Y + asz.Y then
+						return true
+					end
+				end
+			end
+			return false
+		end
+		MainFrame.InputBegan:Connect(function(input)
+			if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then return end
+			if overInteractive() then return end
+			dragging = true
+			startInputPos = input.Position
+			startPos = MainFrame.Position
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then dragging = false end
+			end)
+		end)
+		MainFrame.InputChanged:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+				dragInput = input
+			end
+		end)
+		UserInputService.InputChanged:Connect(function(input)
+			if dragging and input == dragInput then
+				local d = input.Position - startInputPos
+				MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+			end
+		end)
+	end
 
 	
 	local ToggleBtn = Instance.new("TextButton")
