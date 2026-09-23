@@ -335,6 +335,160 @@ function Library:AddWindow(hubTitle, hubImage, gameTitle)
 	local WindowObj = {}
 	local _coloredElements = {}
 
+	-- ── Shared slider row: draggable track + value input (supports decimals) ──
+	local function CreateSliderRow(parent, order, text, min, max, default, callback, suffix, decimals, zBase, aspect, regKey)
+		min = min or 0
+		max = max or 100
+		suffix = suffix or ""
+		decimals = decimals or 0
+		local value = math.clamp(default or min, min, max)
+		local dragging = false
+		zBase = zBase or 2
+
+		local function fmt(v)
+			if decimals > 0 then
+				return string.format("%." .. decimals .. "f", v)
+			end
+			return tostring(math.floor(v + 0.5))
+		end
+
+		local Slider = New("Frame", {
+			Name = "Slider",
+			Size = UDim2.new(1, 0, 0.20000000298023224, 0),
+			BackgroundColor3 = Color3.fromRGB(162, 162, 162),
+			BackgroundTransparency = 1,
+			LayoutOrder = order,
+			ZIndex = zBase,
+		}, parent)
+		New("UIAspectRatioConstraint", { AspectRatio = aspect or 9, AspectType = Enum.AspectType.ScaleWithParentSize }, Slider)
+
+		New("Frame", {
+			Name = "Lines",
+			Position = UDim2.new(0.05, 0, 1, 0),
+			Size = UDim2.new(0.9, 0, 0, 1),
+			BackgroundColor3 = Color3.fromRGB(90, 90, 90),
+			BackgroundTransparency = 0.9,
+			ZIndex = zBase,
+			BorderSizePixel = 0,
+		}, Slider)
+
+		New("TextLabel", {
+			Name = "TextToggle",
+			Position = UDim2.new(0.048, 0, 0.16, 0),
+			Size = UDim2.new(0.55, 0, 0.42, 0),
+			BackgroundTransparency = 1,
+			Text = text,
+			TextColor3 = Color3.fromRGB(255, 255, 255),
+			TextScaled = true,
+			Font = Enum.Font.SourceSansSemibold,
+			TextTransparency = 0.1,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			ZIndex = zBase + 1,
+		}, Slider)
+
+		local InputBox = New("TextBox", {
+			Name = "ValueInput",
+			Position = UDim2.new(0.755, 0, 0.12, 0),
+			Size = UDim2.new(0.195, 0, 0.46, 0),
+			BackgroundColor3 = Color3.fromRGB(42, 42, 42),
+			Text = fmt(value) .. suffix,
+			TextColor3 = Color3.fromRGB(255, 255, 255),
+			TextScaled = true,
+			Font = Enum.Font.SourceSansSemibold,
+			ZIndex = zBase + 3,
+			ClearTextOnFocus = false,
+		}, Slider)
+		New("UICorner", { CornerRadius = UDim.new(0, 5) }, InputBox)
+
+		local Track = New("Frame", {
+			Name = "Line",
+			Position = UDim2.new(0.048, 0, 0.74, 0),
+			Size = UDim2.new(0.902, 0, 0.09, 0),
+			BackgroundColor3 = Color3.fromRGB(45, 45, 45),
+			ZIndex = zBase + 1,
+		}, Slider)
+		New("UICorner", { CornerRadius = UDim.new(1, 0) }, Track)
+
+		local Fill = New("Frame", {
+			Name = "Fill",
+			Size = UDim2.fromScale(0, 1),
+			BackgroundColor3 = mainColor,
+			ZIndex = zBase + 2,
+		}, Track)
+		New("UICorner", { CornerRadius = UDim.new(1, 0) }, Fill)
+
+		local Knob = New("Frame", {
+			Name = "Knob",
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.new(0, 0, 0.5, 0),
+			Size = UDim2.new(0, 0, 2.6, 0),
+			BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+			ZIndex = zBase + 3,
+		}, Track)
+		New("UICorner", { CornerRadius = UDim.new(1, 0) }, Knob)
+		New("UIAspectRatioConstraint", {}, Knob)
+
+		local function updateVisuals()
+			local r = (max - min) ~= 0 and math.clamp((value - min) / (max - min), 0, 1) or 0
+			Fill.Size = UDim2.fromScale(r, 1)
+			Knob.Position = UDim2.new(r, 0, 0.5, 0)
+			InputBox.Text = fmt(value) .. suffix
+		end
+
+		local function setValue(v, fire)
+			v = math.clamp(v, min, max)
+			if decimals > 0 then
+				local mult = 10 ^ decimals
+				v = math.floor(v * mult + 0.5) / mult
+			else
+				v = math.floor(v + 0.5)
+			end
+			value = v
+			updateVisuals()
+			if fire ~= false and callback then callback(value) end
+		end
+
+		local function setFromX(x)
+			local r = math.clamp((x - Track.AbsolutePosition.X) / math.max(Track.AbsoluteSize.X, 1), 0, 1)
+			setValue(min + (max - min) * r)
+		end
+
+		Track.InputBegan:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+				dragging = true
+				setFromX(input.Position.X)
+			end
+		end)
+		UserInputService.InputEnded:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+				dragging = false
+			end
+		end)
+		UserInputService.InputChanged:Connect(function(input)
+			if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+				setFromX(input.Position.X)
+			end
+		end)
+
+		InputBox.FocusLost:Connect(function()
+			local raw = InputBox.Text:gsub("[^%d%.%-%+eE]", "")
+			local n = tonumber(raw)
+			if n then
+				setValue(n)
+			else
+				updateVisuals()
+			end
+		end)
+
+		task.defer(updateVisuals)
+
+		local obj = {}
+		function obj:Set(val) setValue(val) end
+		function obj:Get() return value end
+		table.insert(_registeredElements, { key = regKey, obj = obj })
+		return obj
+	end
+
 	local NeverloseCS2 = New("ScreenGui", {
 		Name = "NeverloseCS2",
 		ResetOnSpawn = false,
@@ -349,11 +503,11 @@ function Library:AddWindow(hubTitle, hubImage, gameTitle)
 
 	local MainFrame = New("Frame", {
 		Name = "MainFrame",
-      Active = true,
-      Draggable = true,
+      Active = false,
+      Draggable = false,
       AnchorPoint = Vector2.new(0.5,0.4),
 		Size = UDim2.new(1, 0, 1, 0),
-		BackgroundColor3 = Color3.fromRGB(3,3,14),
+		BackgroundColor3 = Color3.fromRGB(10, 10, 10),
       Position = UDim2.new(0.5, 0, 0.4, 0),
 		BackgroundTransparency = 0.2,
 		BorderSizePixel = 1,
@@ -364,156 +518,7 @@ function Library:AddWindow(hubTitle, hubImage, gameTitle)
 	local AcrylicBlur = AcrylicLib.new(MainFrame)
 
 
-local Stats = game:GetService('Stats')
 
-local GameInfo = Instance.new('Frame')
-GameInfo.Name = "GameInfo"
-GameInfo.Position = UDim2.new(0.75, 0, 0, 0)
-GameInfo.Size = UDim2.new(0.8, 0, 0.079, 0)
-GameInfo.BackgroundColor3 = Color3.fromRGB(14,17,27)
-GameInfo.BackgroundTransparency = 0.2
-GameInfo.BorderSizePixel = 0
-GameInfo.Active = true
-GameInfo.Draggable = true
-GameInfo.AutomaticSize = Enum.AutomaticSize.X
-GameInfo.Parent = NeverloseCS2
-
-
-local UICorner = Instance.new('UICorner')
-UICorner.CornerRadius = UDim.new(1, 0)
-UICorner.Parent = GameInfo
-
-local UIAspectRatioConstraint = Instance.new('UIAspectRatioConstraint')
-UIAspectRatioConstraint.AspectRatio = 9
-UIAspectRatioConstraint.Parent = GameInfo
-
-local UIScale = Instance.new('UIScale')
-UIScale.Scale = 0.63
-UIScale.Parent = GameInfo
-
-local FpsIcon = Instance.new('ImageLabel')
-FpsIcon.Name = "FpsIcon"
-FpsIcon.Position = UDim2.new(0.05, 0, 0.34, 0)
-FpsIcon.Size = UDim2.new(0.699, 0, 0.4, 0)
-FpsIcon.BackgroundTransparency = 1
-FpsIcon.Image = "rbxthumb://type=Asset&id=137471315687443&w=420&h=420"
-FpsIcon.ImageColor3 = Color3.fromRGB(0, 168, 255)
-FpsIcon.Parent = GameInfo
-
-local UIAspectRatio_FpsIcon = Instance.new('UIAspectRatioConstraint')
-UIAspectRatio_FpsIcon.Parent = FpsIcon
-
-local FPSText = Instance.new('TextLabel')
-FPSText.Name = "FPSText"
-FPSText.Position = UDim2.new(0.119, 0, 0.269, 0)
-FPSText.Size = UDim2.new(0.5, 0, 0.49, 0)
-FPSText.BackgroundTransparency = 1
-FPSText.Text = "0 FPS"
-FPSText.TextColor3 = Color3.fromRGB(255, 255, 255)
-FPSText.TextScaled = true
-FPSText.Font = Enum.Font.SourceSansSemibold
-FPSText.TextTransparency = 0.5
-FPSText.TextXAlignment = Enum.TextXAlignment.Left
-FPSText.Parent = GameInfo
-
-local UIAspectRatio_FPSText = Instance.new('UIAspectRatioConstraint')
-UIAspectRatio_FPSText.AspectRatio = 8
-UIAspectRatio_FPSText.Parent = FPSText
-
-local SignalImage = Instance.new('ImageLabel')
-SignalImage.Name = "SignalImage"
-SignalImage.Position = UDim2.new(0.3, 0, 0.34, 0)
-SignalImage.Size = UDim2.new(0.699, 0, 0.4, 0)
-SignalImage.BackgroundTransparency = 1
-SignalImage.Image = "rbxthumb://type=Asset&id=113541980541438&w=420&h=420"
-SignalImage.ImageColor3 = Color3.fromRGB(0, 168, 255)
-SignalImage.Parent = GameInfo
-
-local UIAspectRatio_SignalImage = Instance.new('UIAspectRatioConstraint')
-UIAspectRatio_SignalImage.Parent = SignalImage
-
-local MSText = Instance.new('TextLabel')
-MSText.Name = "MSText"
-MSText.Position = UDim2.new(0.38, 0, 0.268, 0)
-MSText.Size = UDim2.new(0.5, 0, 0.49, 0)
-MSText.BackgroundTransparency = 1
-MSText.Text = "0 MS"
-MSText.TextColor3 = Color3.fromRGB(255, 255, 255)
-MSText.TextScaled = true
-MSText.Font = Enum.Font.SourceSansSemibold
-MSText.TextTransparency = 0.5
-MSText.TextXAlignment = Enum.TextXAlignment.Left
-MSText.Parent = GameInfo
-
-local UIAspectRatio_MSText = Instance.new('UIAspectRatioConstraint')
-UIAspectRatio_MSText.AspectRatio = 8
-UIAspectRatio_MSText.Parent = MSText
-
-local UserIcon = Instance.new('ImageLabel')
-UserIcon.Name = "UserIcon"
-UserIcon.Position = UDim2.new(0.527, 0, 0.3, 0)
-UserIcon.Size = UDim2.new(0.699, 0, 0.5, 0)
-UserIcon.BackgroundTransparency = 1
-UserIcon.Image = "rbxthumb://type=Asset&id=123112467890707&w=420&h=420"
-UserIcon.ImageColor3 = Color3.fromRGB(0, 168, 255)
-UserIcon.Parent = GameInfo
-
-local UIAspectRatio_UserIcon = Instance.new('UIAspectRatioConstraint')
-UIAspectRatio_UserIcon.Parent = UserIcon
-
-local Username = Instance.new('TextLabel')
-Username.Name = "Username"
-Username.Position = UDim2.new(0.6, 0, 0.268, 0)
-Username.Size = UDim2.new(0.2, 0, 0.49, 0)
-Username.BackgroundTransparency = 1
-Username.Text = LocalPlayer.DisplayName
-Username.TextColor3 = Color3.fromRGB(255, 255, 255)
-Username.TextScaled = true
-Username.Font = Enum.Font.SourceSansSemibold
-Username.TextTransparency = 0.5
-Username.TextXAlignment = Enum.TextXAlignment.Left
-Username.Parent = GameInfo
-
-local NeverIcon = Instance.new('ImageLabel')
-NeverIcon.Name = "NeverIcon"
-NeverIcon.Position = UDim2.new(0.8, 0, 0.1, 0)
-NeverIcon.Size = UDim2.new(0.699, 0, 0.8, 0)
-NeverIcon.BackgroundTransparency = 1
-NeverIcon.Image = "rbxthumb://type=Asset&id=118608145176297&w=420&h=420"
-NeverIcon.Parent = GameInfo
-
-local UIAspectRatio_NeverIcon = Instance.new('UIAspectRatioConstraint')
-UIAspectRatio_NeverIcon.Parent = NeverIcon
-
-local UICorner_NeverIcon = Instance.new('UICorner')
-UICorner_NeverIcon.CornerRadius = UDim.new(1, 0)
-UICorner_NeverIcon.Parent = NeverIcon
-
-local Profile = Instance.new('ImageLabel')
-Profile.Name = "Profile"
-Profile.Position = UDim2.new(0.9, 0, 0.1, 0)
-Profile.Size = UDim2.new(0.699, 0, 0.8, 0)
-Profile.BackgroundColor3 = Color3.fromRGB(127, 127, 127)
-Profile.Image = ("rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=420&h=420")
-Profile.Parent = GameInfo
-
-local UIAspectRatio_Profile = Instance.new('UIAspectRatioConstraint')
-UIAspectRatio_Profile.Parent = Profile
-
-local UICorner_Profile = Instance.new('UICorner')
-UICorner_Profile.CornerRadius = UDim.new(1, 0)
-UICorner_Profile.Parent = Profile
-
--- live FPS + ping updates
-local fpsBuffer = {}
-RunService.RenderStepped:Connect(function(dt)
-    table.insert(fpsBuffer, dt)
-    if #fpsBuffer > 20 then table.remove(fpsBuffer, 1) end
-    local avg = 0
-    for _, v in ipairs(fpsBuffer) do avg += v end
-    FPSText.Text = math.round(#fpsBuffer / avg) .. " FPS"
-    MSText.Text = math.round(Stats.Network.ServerStatsItem["Data Ping"]:GetValue()) .. " MS"
-end)
 
 
 local DropShadow = Instance.new("ImageLabel")
@@ -526,7 +531,7 @@ DropShadow.Name = "DropShadow"
 	DropShadow.Size = UDim2.new(1, 47, 1, 47)
 	DropShadow.ZIndex = -1
 	DropShadow.Image = "rbxassetid://6014261993"
-	DropShadow.ImageColor3 = Color3.fromRGB(16,19,28)
+	DropShadow.ImageColor3 = Color3.fromRGB(18, 18, 18)
 	DropShadow.ImageTransparency = 0.34
 	DropShadow.ScaleType = Enum.ScaleType.Slice
 	DropShadow.SliceCenter = Rect.new(49, 49, 450, 450)
@@ -540,7 +545,7 @@ Aspect.AspectRatio = 1.4
 		Name = "HubIcon",
 		Position = UDim2.new(0.014000000432133675, 0, 0.013000000268220901, 0),
 		Size = UDim2.new(0.05000000074505806, 0, 0.05999999865889549, 0),
-		BackgroundColor3 = Color3.fromRGB(19,22,33),
+		BackgroundColor3 = Color3.fromRGB(22, 22, 22),
 		BorderSizePixel = 0,
 		Image = hubImage,
 	}, MainFrame)
@@ -574,119 +579,1105 @@ Aspect.AspectRatio = 1.4
 	}, MainFrame)
 
 
-	-- Game Info Card (replaces profile section)
-	local Info = Instance.new('Frame')
-	Info.Name = "Info"
-	Info.Position = UDim2.new(0.008999999612569809,0,0.9070000052452087,0)
-	Info.Size = UDim2.new(0.20000000298023224,0,0.07900000363588333,0)
-	Info.BackgroundColor3 = Color3.fromRGB(21,24,36)
-	Info.BackgroundTransparency = 0.1
-	Info.BorderSizePixel = 0
-	Info.Parent = MainFrame
-	do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 8); c.Parent = Info end
-	do local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(40,44,65); s.Transparency = 0.7; s.Parent = Info end
+	-- ── Game Card (bottom-left): icon + name + player count ─────
+	local GameInfoData = { Name = "Unknown Experience", Playing = nil }
 
-	-- Fetch game data from Roblox API
-	local GameName = "Unknown Game"
-	local GameIcon = ""
-	local PlayingCount = 0
-
-	local success, result = pcall(function()
-		local gameInfo = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
-		return gameInfo
+	pcall(function()
+		local product = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
+		if product and product.Name then
+			GameInfoData.Name = product.Name
+		end
 	end)
 
-	if success and result then
-		GameName = result.Name or "Unknown Game"
-		PlayingCount = result.Playing or 0
-	end
-
-	-- Try to get game icon
-	local iconSuccess, iconResult = pcall(function()
-		return game:GetService("ThumbnailGenerator"):GenerateThumbnail(game.PlaceId, Enum.ThumbnailType.GameIcon, "150x150")
+	pcall(function()
+		if typeof(request) == "function" then
+			local res = request({
+				Url = "https://games.roblox.com/v1/games?universeIds=" .. tostring(game.GameId),
+				Method = "GET",
+			})
+			if res and res.Body then
+				local data = game:GetService("HttpService"):JSONDecode(res.Body)
+				local d = data.data and data.data[1]
+				if d then
+					if d.name then GameInfoData.Name = d.name end
+					GameInfoData.Playing = d.playing
+				end
+			end
+		end
 	end)
 
-	if iconSuccess and iconResult then
-		GameIcon = iconResult
-	else
-		-- Fallback icon
-		GameIcon = "rbxthumb://type=Asset&id=123112467890707&w=420&h=420"
+	local GameCard = Instance.new("Frame")
+	GameCard.Name = "GameCard"
+	GameCard.Position = UDim2.new(0.009, 0, 0.9, 0)
+	GameCard.Size = UDim2.new(0.205, 0, 0.079, 0)
+	GameCard.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+	GameCard.BackgroundTransparency = 0.15
+	GameCard.BorderSizePixel = 0
+	GameCard.Parent = MainFrame
+	do
+		local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 8); c.Parent = GameCard
+		local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(60, 60, 60); s.Transparency = 0.85; s.Parent = GameCard
 	end
 
-	-- Game Icon
-	local GameIconImg = Instance.new('ImageLabel')
-	GameIconImg.Name = "GameIcon"
-	GameIconImg.Size = UDim2.new(0.3400000035762787,0,1,0)
-	GameIconImg.BackgroundColor3 = Color3.fromRGB(21,24,36)
-	GameIconImg.Image = GameIcon
-	GameIconImg.ScaleType = Enum.ScaleType.Crop
-	GameIconImg.Parent = Info
-	New("UICorner", { CornerRadius = UDim.new(0, 8) }, GameIconImg)
-	New("UIAspectRatioConstraint", { AspectType = Enum.AspectType.ScaleWithParentSize }, GameIconImg)
+	local GameIcon = Instance.new("ImageLabel")
+	GameIcon.Name = "GameIcon"
+	GameIcon.Position = UDim2.new(0.045, 0, 0.5, 0)
+	GameIcon.AnchorPoint = Vector2.new(0, 0.5)
+	GameIcon.Size = UDim2.new(0.75, 0, 0.72, 0)
+	GameIcon.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	GameIcon.Image = "rbxthumb://type=GameIcon&id=" .. tostring(game.GameId) .. "&w=150&h=150"
+	GameIcon.Parent = GameCard
+	do
+		local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = GameIcon
+		local a = Instance.new("UIAspectRatioConstraint"); a.AspectType = Enum.AspectType.ScaleWithParentSize; a.Parent = GameIcon
+	end
 
-	-- Game Name
-	local GameNameLabel = Instance.new('TextLabel')
-	GameNameLabel.Name = "GameName"
-	GameNameLabel.Position = UDim2.new(0.3000060021877289,0,0.10000000596046448,0)
-	GameNameLabel.Size = UDim2.new(0.6000010371208191,0,0.4000006318092346,0)
-	GameNameLabel.BackgroundColor3 = Color3.fromRGB(162,162,162)
-	GameNameLabel.BackgroundTransparency = 1
-	GameNameLabel.Text = GameName
-	GameNameLabel.TextColor3 = Color3.fromRGB(255,255,255)
-	GameNameLabel.TextScaled = true
-	GameNameLabel.Font = Enum.Font.SourceSansSemibold
-	GameNameLabel.TextXAlignment = Enum.TextXAlignment.Left
-	GameNameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-	GameNameLabel.Parent = Info
+	local GameName = Instance.new("TextLabel")
+	GameName.Name = "GameName"
+	GameName.Position = UDim2.new(0.32, 0, 0.1, 0)
+	GameName.Size = UDim2.new(0.64, 0, 0.44, 0)
+	GameName.BackgroundTransparency = 1
+	GameName.Text = GameInfoData.Name
+	GameName.TextColor3 = Color3.fromRGB(255, 255, 255)
+	GameName.TextScaled = true
+	GameName.Font = Enum.Font.SourceSansSemibold
+	GameName.TextXAlignment = Enum.TextXAlignment.Left
+	GameName.TextTruncate = Enum.TextTruncate.AtEnd
+	GameName.Parent = GameCard
 
-	-- Players Online Icon
-	local PlayersIcon = Instance.new('ImageLabel')
-	PlayersIcon.Name = "PlayersIcon"
-	PlayersIcon.Position = UDim2.new(0.30002495646476746,0,0.550000011920929,0)
-	PlayersIcon.Size = UDim2.new(0.0800000834465027,0,0.25,0)
-	PlayersIcon.BackgroundTransparency = 1
-	PlayersIcon.Image = "rbxthumb://type=Asset&id=123112467890707&w=420&h=420"
-	PlayersIcon.ImageColor3 = Color3.fromRGB(255,255,255)
-	PlayersIcon.Parent = Info
-	do local a = Instance.new('UIAspectRatioConstraint'); a.Parent = PlayersIcon end
+	local PlayingLabel = Instance.new("TextLabel")
+	PlayingLabel.Name = "Playing"
+	PlayingLabel.Position = UDim2.new(0.32, 0, 0.56, 0)
+	PlayingLabel.Size = UDim2.new(0.64, 0, 0.34, 0)
+	PlayingLabel.BackgroundTransparency = 1
+	PlayingLabel.Text = "..."
+	PlayingLabel.TextColor3 = Color3.fromRGB(170, 170, 170)
+	PlayingLabel.TextScaled = true
+	PlayingLabel.Font = Enum.Font.SourceSansSemibold
+	PlayingLabel.TextXAlignment = Enum.TextXAlignment.Left
+	PlayingLabel.Parent = GameCard
 
-	-- Players Count
-	local PlayersLabel = Instance.new('TextLabel')
-	PlayersLabel.Name = "PlayersCount"
-	PlayersLabel.Position = UDim2.new(0.400000059604645,0,0.550000011920929,0)
-	PlayersLabel.Size = UDim2.new(0.5000000238418579,0,0.25,0)
-	PlayersLabel.BackgroundColor3 = Color3.fromRGB(255,255,255)
-	PlayersLabel.BackgroundTransparency = 1
-	PlayersLabel.Text = tostring(PlayingCount) .. " Playing"
-	PlayersLabel.TextColor3 = Color3.fromRGB(255,255,255)
-	PlayersLabel.TextScaled = true
-	PlayersLabel.Font = Enum.Font.SourceSansSemibold
-	PlayersLabel.TextTransparency = 0.5
-	PlayersLabel.TextXAlignment = Enum.TextXAlignment.Left
-	PlayersLabel.Parent = Info
+	local function refreshPlayingLabel()
+		if GameInfoData.Playing == nil then
+			PlayingLabel.Text = "\u{1F465} " .. tostring(#Players:GetPlayers()) .. " in server"
+		else
+			PlayingLabel.Text = "\u{1F465} " .. tostring(GameInfoData.Playing) .. " playing"
+		end
+	end
+	refreshPlayingLabel()
 
-	MakeDraggable(ImageLabel, MainFrame)
+	Players.PlayerAdded:Connect(function() if GameInfoData.Playing == nil then refreshPlayingLabel() end end)
+	Players.PlayerRemoving:Connect(function() if GameInfoData.Playing == nil then refreshPlayingLabel() end end)
+
+	task.spawn(function()
+		while true do
+			task.wait(60)
+			if typeof(request) == "function" then
+				pcall(function()
+					local res = request({
+						Url = "https://games.roblox.com/v1/games?universeIds=" .. tostring(game.GameId),
+						Method = "GET",
+					})
+					if res and res.Body then
+						local data = game:GetService("HttpService"):JSONDecode(res.Body)
+						local d = data.data and data.data[1]
+						if d and d.playing then
+							GameInfoData.Playing = d.playing
+						end
+					end
+				end)
+				refreshPlayingLabel()
+			end
+		end
+	end)
+
+
+	local Tab = New("ScrollingFrame", {
+		Name = "Tab",
+		Position = UDim2.new(0.00800000037997961, 0, 0.085, 0),
+		Size = UDim2.new(0.20000000298023224, 0, 0.815, 0),
+		BackgroundColor3 = Color3.fromRGB(162, 162, 162),
+      BorderSizePixel = 0,
+		BackgroundTransparency = 1,
+		ScrollBarThickness = 0,
+      ScrollBarImageTransparency = 1,
+	}, MainFrame)
+	New("UIListLayout", {
+		Padding = UDim.new(0, 3),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+	}, Tab)
+
+	
+
+	local Frame2 = New("Frame", {
+		Name = "Frame2",
+		Position = UDim2.new(0.23000000417232513, 0, 0, 0),
+		Size = UDim2.new(0.7699999809265137, 0, 1, 0),
+		BackgroundColor3 = Color3.fromRGB(16, 16, 16),
+		BackgroundTransparency = 0.8,
+		BorderSizePixel = 0,
+	}, MainFrame)
+	New("UICorner", {}, Frame2)
+
+	local Header = New("Frame", {
+		Name = "Header",
+		Size = UDim2.new(1, 0, 0.09, 0),
+		BackgroundColor3 = Color3.fromRGB(162, 162, 162),
+		BackgroundTransparency = 1,
+	}, Frame2)
+
+	local CloseBtn = New("TextButton", {
+		Name = "CloseMenu",
+		Position = UDim2.new(0.925, 0, 0.13, 0),
+		Size = UDim2.new(0.06, 0, 0.6, 0),
+		BackgroundTransparency = 1,
+		Text = "•   •   •",
+		TextColor3 = Color3.fromRGB(255, 255, 255),
+		TextScaled = true,
+		Font = Enum.Font.SourceSansSemibold,
+		ZIndex = 10,
+	}, Header)
+
+	local _configs = {} -- { name=string, data=table }
+
+	local function GetConfigPath(name)
+		return "NeverloseConfig_" .. name .. ".json"
+	end
+
+	local function SaveNamedConfig(name)
+		if not writefile then return end
+		local data = {}
+		for _, entry in ipairs(_registeredElements) do
+			local ok, val = pcall(function() return entry.obj:Get() end)
+			if ok then
+				local s = SerializeValue(val)
+				if s ~= nil then data[entry.key] = s end
+			end
+		end
+		local ok, encoded = pcall(game:GetService("HttpService").JSONEncode, game:GetService("HttpService"), data)
+		if ok then pcall(writefile, GetConfigPath(name), encoded) end
+	end
+
+	local function LoadNamedConfig(name)
+		if not readfile or not isfile then return end
+		local path = GetConfigPath(name)
+		if not isfile(path) then return end
+		local ok, content = pcall(readfile, path)
+		if not ok or not content then return end
+		local dok, data = pcall(game:GetService("HttpService").JSONDecode, game:GetService("HttpService"), content)
+		if not dok or type(data) ~= "table" then return end
+		for _, entry in ipairs(_registeredElements) do
+			local saved = data[entry.key]
+			if saved ~= nil then
+				pcall(function() entry.obj:Set(DeserializeValue(saved)) end)
+			end
+		end
+	end
+
+	local function ListConfigs()
+		if not listfiles then return {} end
+		local result = {}
+		local ok, files = pcall(listfiles, "")
+		if not ok then return result end
+		for _, f in ipairs(files) do
+			local name = f:match("NeverloseConfig_(.+)%.json$")
+			if name then table.insert(result, name) end
+		end
+		return result
+	end
+
+	
+
+	-- ── Stats Pill (FPS · MS · Username) ────────────────────────
+	local Save = Instance.new("Frame")
+	Save.Name = "Save"
+	Save.Position = UDim2.new(0.009999999776482582, 0, 0.2, 0)
+	Save.Size = UDim2.new(0, 0, 0.55, 0)
+	Save.AutomaticSize = Enum.AutomaticSize.X
+	Save.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+	Save.BackgroundTransparency = 0.4
+	Save.BorderSizePixel = 0
+	Save.Parent = Header
+	do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = Save end
+	do local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(55, 55, 55); s.Transparency = 0.85; s.Parent = Save end
+	do local p = Instance.new("UIPadding"); p.PaddingLeft = UDim.new(0, 10); p.PaddingRight = UDim.new(0, 10); p.Parent = Save end
+
+	local SaveLayout = Instance.new("UIListLayout")
+	SaveLayout.FillDirection = Enum.FillDirection.Horizontal
+	SaveLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	SaveLayout.Padding = UDim.new(0, 10)
+	SaveLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	SaveLayout.Parent = Save
+
+	local function MakeStatLabel(order, text, transparency)
+		local l = Instance.new("TextLabel")
+		l.Name = "Stat" .. order
+		l.LayoutOrder = order
+		l.Size = UDim2.new(0, 0, 0.85, 0)
+		l.AutomaticSize = Enum.AutomaticSize.X
+		l.BackgroundTransparency = 1
+		l.Text = text
+		l.TextColor3 = Color3.fromRGB(255, 255, 255)
+		l.TextSize = 14
+		l.Font = Enum.Font.SourceSansSemibold
+		l.TextTransparency = transparency
+		l.TextXAlignment = Enum.TextXAlignment.Left
+		l.Parent = Save
+		return l
+	end
+
+	local StatsFPS = MakeStatLabel(1, "0 FPS", 0.2)
+	local StatsMS  = MakeStatLabel(2, "0 MS", 0.2)
+	local StatsUser = MakeStatLabel(3, LocalPlayer.Name, 0.5)
+
+	-- hidden label kept for config-system compatibility
+	local SaveText = New("TextLabel", {
+		Name = "SaveText",
+		Visible = false,
+		Text = "Save",
+		Size = UDim2.new(0, 0, 0, 0),
+		BackgroundTransparency = 1,
+		TextTransparency = 1,
+	}, Save)
+
+	local TriggerSaveConfig = Instance.new("TextButton")
+	TriggerSaveConfig.Name = "TriggerSaveConfig"
+	TriggerSaveConfig.Size = UDim2.new(1, 0, 1, 0)
+	TriggerSaveConfig.BackgroundTransparency = 1
+	TriggerSaveConfig.Text = ""
+	TriggerSaveConfig.ZIndex = 15
+	TriggerSaveConfig.Parent = Save
+
+	local StatsService = game:GetService('Stats')
+	local fpsBuffer = {}
+	RunService.RenderStepped:Connect(function(dt)
+		table.insert(fpsBuffer, dt)
+		if #fpsBuffer > 20 then table.remove(fpsBuffer, 1) end
+		local avg = 0
+		for _, v in ipairs(fpsBuffer) do avg += v end
+		StatsFPS.Text = tostring(math.round(#fpsBuffer / avg)) .. " FPS"
+		StatsMS.Text = tostring(math.round(StatsService.Network.ServerStatsItem["Data Ping"]:GetValue())) .. " MS"
+	end)
+
+	-- ── ConfigMainFrame (new design panel) ──────────────────────
+	local ConfigMainFrame = Instance.new("Frame")
+	ConfigMainFrame.Name = "ConfigMainFrame"
+	ConfigMainFrame.Position = UDim2.new(0, 0, 1.3, 0)
+	ConfigMainFrame.Size = UDim2.new(2.5, 0, 8, 0)
+	ConfigMainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+	ConfigMainFrame.BackgroundTransparency = 0.09
+	ConfigMainFrame.BorderSizePixel = 0
+	ConfigMainFrame.ZIndex = 110
+	ConfigMainFrame.AutomaticSize = Enum.AutomaticSize.Y
+	ConfigMainFrame.ClipsDescendants = true
+	ConfigMainFrame.Visible = false
+	ConfigMainFrame.Parent = Save
+	do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 10); c.Parent = ConfigMainFrame end
+	do local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(34, 34, 34); s.Transparency = 0.800000011920929; s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; s.Parent = ConfigMainFrame end
+	do local a = Instance.new("UIAspectRatioConstraint"); a.AspectRatio = 1.5; a.Parent = ConfigMainFrame end
+
+	local CMHeader = Instance.new("Frame")
+	CMHeader.Name = "Header"
+	CMHeader.Size = UDim2.new(1, 0, 0.25, 0)
+	CMHeader.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+	CMHeader.BorderSizePixel = 0
+	CMHeader.ZIndex = 100
+	CMHeader.Parent = ConfigMainFrame
+	do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 10); c.Parent = CMHeader end
+
+	-- Cloud icon
+	local CloudIcon = Instance.new("ImageLabel")
+	CloudIcon.Name = "CloudIcon"
+	CloudIcon.Position = UDim2.new(0.037, 0, 0.27, 0)
+	CloudIcon.Size = UDim2.new(0.09, 0, 0.5, 0)
+	CloudIcon.BackgroundTransparency = 1
+	CloudIcon.Image = "rbxassetid://114688799023067"
+	CloudIcon.ImageColor3 = mainColor
+	CloudIcon.ZIndex = 1000
+	CloudIcon.Parent = CMHeader
+	do local a = Instance.new("UIAspectRatioConstraint"); a.Parent = CloudIcon end
+
+	-- Title
+	local CMTitle = Instance.new("TextLabel")
+	CMTitle.Name = "TitleLabel"
+	CMTitle.Position = UDim2.new(0.14, 0, 0, 0)
+	CMTitle.Size = UDim2.new(0.3, 0, 1, 0)
+	CMTitle.BackgroundTransparency = 1
+	CMTitle.Text = "Presets"
+	CMTitle.TextColor3 = mainColor
+	CMTitle.TextSize = 20
+	CMTitle.Font = Enum.Font.GothamBold
+	CMTitle.ZIndex = 1000
+	CMTitle.TextXAlignment = Enum.TextXAlignment.Left
+	CMTitle.Parent = CMHeader
+
+	-- Header right buttons
+	local CMHeaderRight = Instance.new("Frame")
+	CMHeaderRight.Name = "HeaderRight"
+	CMHeaderRight.Position = UDim2.new(0.65, 0, 0, 0)
+	CMHeaderRight.Size = UDim2.new(0.3, 0, 1, 0)
+	CMHeaderRight.BackgroundTransparency = 1
+	CMHeaderRight.ZIndex = 1000
+	CMHeaderRight.Parent = CMHeader
+	do
+		local ll = Instance.new("UIListLayout")
+		ll.FillDirection = Enum.FillDirection.Horizontal
+		ll.HorizontalAlignment = Enum.HorizontalAlignment.Right
+		ll.VerticalAlignment = Enum.VerticalAlignment.Center
+		ll.Padding = UDim.new(0, 8)
+		ll.SortOrder = Enum.SortOrder.LayoutOrder
+		ll.Parent = CMHeaderRight
+	end
+
+	-- AutoSave button (toggle)
+	local autoSaveEnabled = false
+	local AutoSaveBtn = Instance.new("ImageButton")
+	AutoSaveBtn.Name = "AutomaticSave"
+	AutoSaveBtn.Size = UDim2.new(0.459, 0, 0.459, 0)
+	AutoSaveBtn.BackgroundTransparency = 1
+	AutoSaveBtn.Image = "rbxassetid://88602887448810"
+	AutoSaveBtn.ImageColor3 = Color3.fromRGB(200, 200, 220) -- off color
+	AutoSaveBtn.ZIndex = 1000
+	AutoSaveBtn.Parent = CMHeaderRight
+	do local a = Instance.new("UIAspectRatioConstraint"); a.AspectRatio = 1.2; a.Parent = AutoSaveBtn end
+
+	-- RecentlyDeleted button
+	local RecentlyDeletedBtn = Instance.new("ImageButton")
+	RecentlyDeletedBtn.Name = "RecentlyDeleted"
+	RecentlyDeletedBtn.Size = UDim2.new(0.459, 0, 0.459, 0)
+	RecentlyDeletedBtn.BackgroundTransparency = 1
+	RecentlyDeletedBtn.Image = "rbxassetid://124719621927271"
+	RecentlyDeletedBtn.ImageColor3 = Color3.fromRGB(200, 200, 220)
+	RecentlyDeletedBtn.ZIndex = 1000
+	RecentlyDeletedBtn.LayoutOrder = 2
+	RecentlyDeletedBtn.Parent = CMHeaderRight
+	do local a = Instance.new("UIAspectRatioConstraint"); a.Parent = RecentlyDeletedBtn end
+
+	-- InsertConfig (add new) button
+	local InsertConfigBtn = Instance.new("ImageButton")
+	InsertConfigBtn.Name = "InsertConfig"
+	InsertConfigBtn.Size = UDim2.new(0.459, 0, 0.459, 0)
+	InsertConfigBtn.BackgroundTransparency = 1
+	InsertConfigBtn.Image = "rbxassetid://79421118238646"
+	InsertConfigBtn.ImageColor3 = Color3.fromRGB(200, 200, 220)
+	InsertConfigBtn.ZIndex = 1000
+	InsertConfigBtn.LayoutOrder = 3
+	InsertConfigBtn.Parent = CMHeaderRight
+	do local a = Instance.new("UIAspectRatioConstraint"); a.Parent = InsertConfigBtn end
+
+	-- Divider line
+	local CMLine = Instance.new("Frame")
+	CMLine.Name = "Line"
+	CMLine.Position = UDim2.new(0.05, 0, 0.898, 0)
+	CMLine.Size = UDim2.new(0.9, 0, 0, 1)
+	CMLine.BackgroundColor3 = Color3.fromRGB(162, 162, 162)
+	CMLine.BackgroundTransparency = 0.7
+	CMLine.BorderSizePixel = 0
+	CMLine.ZIndex = 1000
+	CMLine.Parent = CMHeader
+
+	-- ── Search Container ─────────────────────────────────────────
+	local SearchContainer = Instance.new("Frame")
+	SearchContainer.Name = "SearchContainer"
+	SearchContainer.Position = UDim2.new(0.037, 0, 0.27, 0)
+	SearchContainer.Size = UDim2.new(0.928, 0, 0.143, 0)
+	SearchContainer.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+	SearchContainer.BorderSizePixel = 0
+	SearchContainer.ZIndex = 1000
+	SearchContainer.Parent = ConfigMainFrame
+	do local c = Instance.new("UICorner"); c.Parent = SearchContainer end
+	do local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(46, 46, 46); s.Transparency = 0.5; s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; s.Parent = SearchContainer end
+	do local a = Instance.new("UIAspectRatioConstraint"); a.AspectRatio = 10; a.AspectType = Enum.AspectType.ScaleWithParentSize; a.Parent = SearchContainer end
+
+	local SearchIconImg = Instance.new("ImageLabel")
+	SearchIconImg.Name = "SearchIcon"
+	SearchIconImg.Position = UDim2.new(0.025, 0, 0.25, 0)
+	SearchIconImg.Size = UDim2.new(0, 20, 0, 20)
+	SearchIconImg.BackgroundTransparency = 1
+	SearchIconImg.Image = "rbxassetid://6031154871"
+	SearchIconImg.ImageColor3 = Color3.fromRGB(140, 140, 160)
+	SearchIconImg.ZIndex = 1000
+	SearchIconImg.Parent = SearchContainer
+	do local a = Instance.new("UIAspectRatioConstraint"); a.Parent = SearchIconImg end
+
+	local SearchBox = Instance.new("TextBox")
+	SearchBox.Name = "SearchBox"
+	SearchBox.Position = UDim2.new(0.12, 0, 0, 0)
+	SearchBox.Size = UDim2.new(0.85, 0, 1, 0)
+	SearchBox.BackgroundTransparency = 1
+	SearchBox.Text = ""
+	SearchBox.PlaceholderText = "Search"
+	SearchBox.PlaceholderColor3 = Color3.fromRGB(200, 200, 210)
+	SearchBox.TextColor3 = Color3.fromRGB(210, 215, 225)
+	SearchBox.TextSize = 16
+	SearchBox.Font = Enum.Font.Gotham
+	SearchBox.ZIndex = 1000
+	SearchBox.TextXAlignment = Enum.TextXAlignment.Left
+	SearchBox.ClearTextOnFocus = false
+	SearchBox.Parent = SearchContainer
+
+	-- ── Config Name Input (shown when InsertConfig clicked) ──────
+	local NameInputContainer = Instance.new("Frame")
+	NameInputContainer.Name = "NameInputContainer"
+	NameInputContainer.Position = UDim2.new(0.037, 0, 0.27, 0)
+	NameInputContainer.Size = UDim2.new(0.928, 0, 0.143, 0)
+	NameInputContainer.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+	NameInputContainer.BorderSizePixel = 0
+	NameInputContainer.ZIndex = 1001
+	NameInputContainer.Visible = false
+	NameInputContainer.Parent = ConfigMainFrame
+	do local c = Instance.new("UICorner"); c.Parent = NameInputContainer end
+	do local s = Instance.new("UIStroke"); s.Color = mainColor; s.Transparency = 0.5; s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; s.Parent = NameInputContainer end
+	do local a = Instance.new("UIAspectRatioConstraint"); a.AspectRatio = 10; a.AspectType = Enum.AspectType.ScaleWithParentSize; a.Parent = NameInputContainer end
+
+	local NameOfConfig = Instance.new("TextBox")
+	NameOfConfig.Name = "NameOfConfig"
+	NameOfConfig.Position = UDim2.new(0.03, 0, 0, 0)
+	NameOfConfig.Size = UDim2.new(0.75, 0, 1, 0)
+	NameOfConfig.BackgroundTransparency = 1
+	NameOfConfig.Text = ""
+	NameOfConfig.PlaceholderText = "Config name..."
+	NameOfConfig.PlaceholderColor3 = Color3.fromRGB(200, 200, 210)
+	NameOfConfig.TextColor3 = Color3.fromRGB(210, 215, 225)
+	NameOfConfig.TextSize = 16
+	NameOfConfig.Font = Enum.Font.Gotham
+	NameOfConfig.ZIndex = 1001
+	NameOfConfig.TextXAlignment = Enum.TextXAlignment.Left
+	NameOfConfig.ClearTextOnFocus = false
+	NameOfConfig.Parent = NameInputContainer
+
+	local ConfirmAddBtn = Instance.new("TextButton")
+	ConfirmAddBtn.Name = "ConfirmAdd"
+	ConfirmAddBtn.Position = UDim2.new(0.78, 0, 0.1, 0)
+	ConfirmAddBtn.Size = UDim2.new(0.2, 0, 0.8, 0)
+	ConfirmAddBtn.BackgroundColor3 = mainColor
+	ConfirmAddBtn.BackgroundTransparency = 0.3
+	ConfirmAddBtn.Text = "Create"
+	ConfirmAddBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	ConfirmAddBtn.TextSize = 13
+	ConfirmAddBtn.Font = Enum.Font.GothamBold
+	ConfirmAddBtn.ZIndex = 1002
+	ConfirmAddBtn.Parent = NameInputContainer
+	do local c = Instance.new("UICorner"); c.Parent = ConfirmAddBtn end
+
+	-- ── List Container ────────────────────────────────────────────
+	local ListContainer = Instance.new("Frame")
+	ListContainer.Name = "ListContainer"
+	ListContainer.Position = UDim2.new(0.037, 0, 0.48, 0)
+	ListContainer.Size = UDim2.new(0.93, 0, 0.5, 0)
+	ListContainer.BackgroundTransparency = 1
+	ListContainer.BorderSizePixel = 0
+	ListContainer.ZIndex = 100
+	ListContainer.AutomaticSize = Enum.AutomaticSize.Y
+	ListContainer.Parent = ConfigMainFrame
+	do
+		local ll = Instance.new("UIListLayout")
+		ll.Name = "UIListLayout"
+		ll.Padding = UDim.new(0, 6)
+		ll.Parent = ListContainer
+	end
+
+	-- Spacing frame
+	local Space = Instance.new("Frame")
+	Space.Name = "Space"
+	Space.Size = UDim2.new(1, 0, 0, 3)
+	Space.BackgroundTransparency = 1
+	Space.ZIndex = 100
+	Space.Parent = ListContainer
+
+	-- ── Icons ────────────────────────────────────────────────────
+	local SAVE_ICON = "http://www.roblox.com/asset/?id=6035067857"  -- floppy/save
+	local LOAD_ICON = "rbxassetid://102258343905919"                  -- download/load
+
+	-- ── Deleted configs store (in-memory + file persistence) ─────
+	local DELETED_FILE = "NeverloseDeleted.json"
+	local _deletedConfigs = {} -- { name=string, data=table }
+
+	local function LoadDeletedList()
+		if not readfile or not isfile or not isfile(DELETED_FILE) then return end
+		local ok, content = pcall(readfile, DELETED_FILE)
+		if not ok or not content then return end
+		local dok, data = pcall(game:GetService("HttpService").JSONDecode, game:GetService("HttpService"), content)
+		if dok and type(data) == "table" then _deletedConfigs = data end
+	end
+
+	local function SaveDeletedList()
+		if not writefile then return end
+		local ok, encoded = pcall(game:GetService("HttpService").JSONEncode, game:GetService("HttpService"), _deletedConfigs)
+		if ok then pcall(writefile, DELETED_FILE, encoded) end
+	end
+
+	LoadDeletedList()
+
+	-- ── Recently Deleted Panel ────────────────────────────────────
+	local RecentlyDeletedPanel = Instance.new("Frame")
+	RecentlyDeletedPanel.Name = "RecentlyDeletedPanel"
+	RecentlyDeletedPanel.Position = UDim2.new(0, 0, 1.3, 0)
+	RecentlyDeletedPanel.Size = UDim2.new(2.5, 0, 6, 0)
+	RecentlyDeletedPanel.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+	RecentlyDeletedPanel.BackgroundTransparency = 0.01
+	RecentlyDeletedPanel.BorderSizePixel = 0
+	RecentlyDeletedPanel.ZIndex = 120
+	RecentlyDeletedPanel.AutomaticSize = Enum.AutomaticSize.Y
+	RecentlyDeletedPanel.ClipsDescendants = true
+	RecentlyDeletedPanel.Visible = false
+	RecentlyDeletedPanel.Parent = Save
+	do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 10); c.Parent = RecentlyDeletedPanel end
+	do local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(34, 34, 34); s.Transparency = 0.8; s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; s.Parent = RecentlyDeletedPanel end
+	do local a = Instance.new("UIAspectRatioConstraint"); a.AspectRatio = 1.5; a.Parent = RecentlyDeletedPanel end
+
+	-- RD Header
+	local RDHeader = Instance.new("Frame")
+	RDHeader.Name = "RDHeader"
+	RDHeader.Size = UDim2.new(1, 0, 0.22, 0)
+	RDHeader.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+	RDHeader.BorderSizePixel = 0
+	RDHeader.ZIndex = 121
+	RDHeader.Parent = RecentlyDeletedPanel
+	do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 10); c.Parent = RDHeader end
+
+	local RDTitle = Instance.new("TextLabel")
+	RDTitle.Name = "RDTitle"
+	RDTitle.Position = UDim2.new(0.05, 0, 0, 0)
+	RDTitle.Size = UDim2.new(0.6, 0, 1, 0)
+	RDTitle.BackgroundTransparency = 1
+	RDTitle.Text = "Recently Deleted"
+	RDTitle.TextColor3 = Color3.fromRGB(255, 100, 100)
+	RDTitle.TextSize = 18
+	RDTitle.Font = Enum.Font.GothamBold
+	RDTitle.ZIndex = 122
+	RDTitle.TextXAlignment = Enum.TextXAlignment.Left
+	RDTitle.Parent = RDHeader
+
+	local RDBackBtn = Instance.new("TextButton")
+	RDBackBtn.Name = "RDBackBtn"
+	RDBackBtn.Position = UDim2.new(0.82, 0, 0.2, 0)
+	RDBackBtn.Size = UDim2.new(0.14, 0, 0.6, 0)
+	RDBackBtn.BackgroundColor3 = Color3.fromRGB(26, 26, 26)
+	RDBackBtn.BackgroundTransparency = 0.3
+	RDBackBtn.Text = "← Back"
+	RDBackBtn.TextColor3 = Color3.fromRGB(200, 200, 220)
+	RDBackBtn.TextSize = 12
+	RDBackBtn.Font = Enum.Font.GothamBold
+	RDBackBtn.ZIndex = 122
+	RDBackBtn.Parent = RDHeader
+	do local c = Instance.new("UICorner"); c.Parent = RDBackBtn end
+
+	-- RD list
+	local RDList = Instance.new("Frame")
+	RDList.Name = "RDList"
+	RDList.Position = UDim2.new(0.037, 0, 0.28, 0)
+	RDList.Size = UDim2.new(0.926, 0, 0.7, 0)
+	RDList.BackgroundTransparency = 1
+	RDList.BorderSizePixel = 0
+	RDList.ZIndex = 121
+	RDList.AutomaticSize = Enum.AutomaticSize.Y
+	RDList.Parent = RecentlyDeletedPanel
+	do local ll = Instance.new("UIListLayout"); ll.Padding = UDim.new(0, 6); ll.Parent = RDList end
+
+	local function RefreshDeletedList()
+		for _, c in ipairs(RDList:GetChildren()) do
+			if c:IsA("Frame") then c:Destroy() end
+		end
+		for i = #_deletedConfigs, 1, -1 do -- newest first
+			local entry = _deletedConfigs[i]
+			local drow = Instance.new("Frame")
+			drow.Name = "DeletedRow"
+			drow.Size = UDim2.new(1, 0, 0, 0)
+			drow.BackgroundColor3 = Color3.fromRGB(34, 34, 34)
+			drow.BackgroundTransparency = 0.6
+			drow.BorderSizePixel = 0
+			drow.ZIndex = 122
+			drow.Parent = RDList
+			do local c = Instance.new("UICorner"); c.Parent = drow end
+			do local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(180,60,60); s.Transparency = 0.7; s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; s.Parent = drow end
+			do local a = Instance.new("UIAspectRatioConstraint"); a.AspectRatio = 10; a.AspectType = Enum.AspectType.ScaleWithParentSize; a.Parent = drow end
+
+			local dlbl = Instance.new("TextLabel")
+			dlbl.Position = UDim2.new(0.04, 0, 0, 0)
+			dlbl.Size = UDim2.new(0.6, 0, 1, 0)
+			dlbl.BackgroundTransparency = 1
+			dlbl.Text = entry.name
+			dlbl.TextColor3 = Color3.fromRGB(220, 180, 180)
+			dlbl.TextSize = 15
+			dlbl.Font = Enum.Font.GothamBold
+			dlbl.ZIndex = 123
+			dlbl.TextXAlignment = Enum.TextXAlignment.Left
+			dlbl.Parent = drow
+
+			local restoreBtn = Instance.new("TextButton")
+			restoreBtn.Name = "Restore"
+			restoreBtn.Position = UDim2.new(0.72, 0, 0.15, 0)
+			restoreBtn.Size = UDim2.new(0.24, 0, 0.7, 0)
+			restoreBtn.BackgroundColor3 = mainColor
+			restoreBtn.BackgroundTransparency = 0.3
+			restoreBtn.Text = "Restore"
+			restoreBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+			restoreBtn.TextSize = 12
+			restoreBtn.Font = Enum.Font.GothamBold
+			restoreBtn.ZIndex = 123
+			restoreBtn.Parent = drow
+			do local c = Instance.new("UICorner"); c.Parent = restoreBtn end
+
+			local idx = i
+			restoreBtn.MouseButton1Click:Connect(function()
+				-- Write the config back to file
+				local ok, encoded = pcall(game:GetService("HttpService").JSONEncode, game:GetService("HttpService"), entry.data)
+				if ok and writefile then
+					pcall(writefile, GetConfigPath(entry.name), encoded)
+				end
+				table.remove(_deletedConfigs, idx)
+				SaveDeletedList()
+				RefreshDeletedList()
+			end)
+		end
+
+	end
+
+	-- Back button
+	RDBackBtn.MouseButton1Click:Connect(function()
+		Tween(RecentlyDeletedPanel, {BackgroundTransparency = 1}, 0.2)
+		task.delay(0.22, function()
+			RecentlyDeletedPanel.Visible = false
+			ConfigMainFrame.Visible = true
+			ConfigMainFrame.BackgroundTransparency = 1
+			Tween(ConfigMainFrame, {BackgroundTransparency = 0.01}, 0.2)
+		end)
+	end)
+
+	-- ── Active row tracking ───────────────────────────────────────
+	local activeRow = nil     -- the currently "loaded" row frame
+	local activeLoadBtn = nil -- its LoadConfig ImageButton
+
+	local function DeactivateRow(rowFrame, loadBtn)
+		-- Reset stroke color/transparency
+		local s = rowFrame:FindFirstChildWhichIsA("UIStroke")
+		if s then Tween(s, {Transparency = 0.5, Color = Color3.fromRGB(52,52,52)}, 0.15) end
+		Tween(rowFrame, {BackgroundTransparency = 0.8}, 0.15)
+		-- Reset icon back to LOAD
+		loadBtn.Image = LOAD_ICON
+		Tween(loadBtn, {ImageColor3 = Color3.fromRGB(180, 180, 200)}, 0.15)
+	end
+
+	-- ── Helper: create a config row ───────────────────────────────
+	local function MakeConfigButton(name)
+		local row = Instance.new("Frame")
+		row.Name = "ConfigRow_" .. name
+		row.Size = UDim2.new(1, 0, 0, 0)
+		row.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+		row.BackgroundTransparency = 0.8
+		row.BorderSizePixel = 0
+		row.ZIndex = 1000
+		row.Parent = ListContainer
+		do local c = Instance.new("UICorner"); c.Parent = row end
+		do local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(46, 46, 46); s.Transparency = 0.5; s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; s.Parent = row end
+		do local a = Instance.new("UIAspectRatioConstraint"); a.AspectRatio = 10; a.AspectType = Enum.AspectType.ScaleWithParentSize; a.Parent = row end
+
+		local rowStroke = row:FindFirstChildWhichIsA("UIStroke")
+
+		-- Name label
+		local Rename = Instance.new("TextBox")
+		Rename.Name = "Rename"
+		Rename.Position = UDim2.new(0.037, 0, 0, 0)
+		Rename.Size = UDim2.new(0.6, 0, 1, 0)
+		Rename.BackgroundTransparency = 1
+		Rename.Text = name
+		Rename.PlaceholderText = "No Name"
+		Rename.PlaceholderColor3 = Color3.fromRGB(210, 215, 225)
+		Rename.TextColor3 = Color3.fromRGB(210, 215, 225)
+		Rename.TextSize = 16
+		Rename.Font = Enum.Font.GothamBold
+		Rename.ZIndex = 1000
+		Rename.TextXAlignment = Enum.TextXAlignment.Left
+		Rename.ClearTextOnFocus = false
+		Rename.Parent = row
+
+		-- "..." button
+		local SettingsBtn = Instance.new("TextButton")
+		SettingsBtn.Name = "Settings"
+		SettingsBtn.Position = UDim2.new(0.75, 0, 0, 0)
+		SettingsBtn.Size = UDim2.new(0.1, 0, 1, 0)
+		SettingsBtn.BackgroundTransparency = 1
+		SettingsBtn.Text = "..."
+		SettingsBtn.TextColor3 = Color3.fromRGB(160, 160, 180)
+		SettingsBtn.TextSize = 20
+		SettingsBtn.Font = Enum.Font.GothamBold
+		SettingsBtn.ZIndex = 3000
+		SettingsBtn.Parent = row
+
+		-- Load/Save icon button
+		local LoadConfigBtn = Instance.new("ImageButton")
+		LoadConfigBtn.Name = "LoadConfig"
+		LoadConfigBtn.Position = UDim2.new(0.879, 0, 0.1, 0)
+		LoadConfigBtn.Size = UDim2.new(0.095, 0, 0.8, 0)
+		LoadConfigBtn.BackgroundTransparency = 1
+		LoadConfigBtn.Image = LOAD_ICON
+		LoadConfigBtn.ImageColor3 = Color3.fromRGB(180, 180, 200)
+		LoadConfigBtn.ZIndex = 3000
+		LoadConfigBtn.Parent = row
+		do local a = Instance.new("UIAspectRatioConstraint"); a.Parent = LoadConfigBtn end
+
+		-- ── Settings Frame (shown on "..." click) ─────────────────
+		local SettingsFrame = Instance.new("Frame")
+		SettingsFrame.Name = "SettingsFrame"
+		SettingsFrame.Position = UDim2.new(0.55, 0, 1, 4)
+		SettingsFrame.Size = UDim2.new(0.44, 0, 0, 0)
+		SettingsFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+		SettingsFrame.BackgroundTransparency = 0.05
+		SettingsFrame.BorderSizePixel = 0
+		SettingsFrame.ZIndex = 6000
+		SettingsFrame.Visible = false
+		SettingsFrame.ClipsDescendants = false
+		SettingsFrame.Parent = row
+		do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 8); c.Parent = SettingsFrame end
+		do local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(60,60,80); s.Transparency = 0.3; s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; s.Parent = SettingsFrame end
+		do
+			local ll = Instance.new("UIListLayout")
+			ll.Padding = UDim.new(0, 2)
+			ll.Parent = SettingsFrame
+		end
+
+		local function MakeSettingBtn(text, textColor, callback)
+			local btn = Instance.new("TextButton")
+			btn.Size = UDim2.new(1, 0, 0, 0)
+			btn.BackgroundTransparency = 1
+			btn.Text = text
+			btn.TextColor3 = textColor
+			btn.TextSize = 13
+			btn.Font = Enum.Font.GothamBold
+			btn.ZIndex = 6001
+			btn.Parent = SettingsFrame
+			do local a = Instance.new("UIAspectRatioConstraint"); a.AspectRatio = 5; a.AspectType = Enum.AspectType.ScaleWithParentSize; a.Parent = btn end
+
+			-- hover highlight
+			btn.MouseEnter:Connect(function()
+				Tween(btn, {BackgroundTransparency = 0.7}, 0.1)
+				btn.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+			end)
+			btn.MouseLeave:Connect(function()
+				Tween(btn, {BackgroundTransparency = 1}, 0.1)
+			end)
+			btn.MouseButton1Click:Connect(function()
+				SettingsFrame.Visible = false
+				callback()
+			end)
+			return btn
+		end
+
+		-- Delete button
+		MakeSettingBtn("Delete", Color3.fromRGB(255, 80, 80), function()
+			-- Save deleted config data before removing file
+			local configData = {}
+			for _, entry in ipairs(_registeredElements) do
+				local ok, val = pcall(function() return entry.obj:Get() end)
+				if ok then
+					local s = SerializeValue(val)
+					if s ~= nil then configData[entry.key] = s end
+				end
+			end
+			-- Try to read from file if it exists
+			local path = GetConfigPath(name)
+			if readfile and isfile and isfile(path) then
+				local ok2, content = pcall(readfile, path)
+				if ok2 then
+					local dok, data = pcall(game:GetService("HttpService").JSONDecode, game:GetService("HttpService"), content)
+					if dok and type(data) == "table" then configData = data end
+				end
+				if delfile then pcall(delfile, path) end
+			end
+			-- Add to deleted list (max 20 entries)
+			table.insert(_deletedConfigs, { name = name, data = configData })
+			if #_deletedConfigs > 20 then table.remove(_deletedConfigs, 1) end
+			SaveDeletedList()
+			-- Deactivate if this was the active row
+			if activeRow == row then
+				activeRow = nil
+				activeLoadBtn = nil
+				SaveText.Text = "Save"
+			end
+			Tween(row, {BackgroundTransparency = 1}, 0.2)
+			task.delay(0.22, function() row:Destroy() end)
+		end)
+
+		-- Duplicate button
+		MakeSettingBtn("Duplicate", Color3.fromRGB(180, 200, 255), function()
+			local dupName = name .. " (Copy)"
+			-- Copy file
+			local path = GetConfigPath(name)
+			if readfile and isfile and isfile(path) and writefile then
+				local ok, content = pcall(readfile, path)
+				if ok then pcall(writefile, GetConfigPath(dupName), content) end
+			else
+				SaveNamedConfig(dupName)
+			end
+			MakeConfigButton(dupName)
+		end)
+
+		-- "..." toggles settings frame
+		local sfOpen = false
+		local function closeSfRow()
+			sfOpen = false
+			Tween(SettingsFrame, {Size = UDim2.new(0.44, 0, 0, 0), BackgroundTransparency = 1}, 0.18)
+			task.delay(0.19, function() SettingsFrame.Visible = false end)
+		end
+		SettingsBtn.MouseButton1Click:Connect(function()
+			sfOpen = not sfOpen
+			if sfOpen then
+				SettingsFrame.BackgroundTransparency = 1
+				SettingsFrame.Visible = true
+				SettingsFrame.Size = UDim2.new(0.44, 0, 0, 0)
+				Tween(SettingsFrame, {Size = UDim2.new(0.44, 0, 0.55, 0), BackgroundTransparency = 0.05}, 0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+			else
+				closeSfRow()
+			end
+		end)
+
+		-- Close settings frame when clicking elsewhere on the row
+		local RowOverlay = Instance.new("TextButton")
+		RowOverlay.Name = "RowOverlay"
+		RowOverlay.Size = UDim2.new(0.75, 0, 1, 0) -- covers everything except "..." and load btn
+		RowOverlay.BackgroundTransparency = 1
+		RowOverlay.Text = ""
+		RowOverlay.ZIndex = 2500
+		RowOverlay.Parent = row
+		RowOverlay.MouseButton1Click:Connect(function()
+			if sfOpen then closeSfRow() end
+		end)
+
+		-- ── Load / Save button logic ──────────────────────────────
+		LoadConfigBtn.MouseButton1Click:Connect(function()
+			if activeRow == row then
+				-- Already loaded → SAVE
+				SaveNamedConfig(name)
+				Tween(LoadConfigBtn, {ImageColor3 = Color3.fromRGB(80, 255, 140)}, 0.1)
+				task.delay(0.6, function()
+					Tween(LoadConfigBtn, {ImageColor3 = mainColor}, 0.3)
+				end)
+			else
+				-- Deactivate previous row if any
+				if activeRow and activeLoadBtn then
+					DeactivateRow(activeRow, activeLoadBtn)
+				end
+				-- Load this config
+				LoadNamedConfig(name)
+				activeRow = row
+				activeLoadBtn = LoadConfigBtn
+				-- Highlight row
+				Tween(rowStroke, {Transparency = 0, Color = mainColor}, 0.2)
+				Tween(row, {BackgroundTransparency = 0.5}, 0.2)
+				-- Swap to SAVE icon
+				LoadConfigBtn.Image = SAVE_ICON
+				Tween(LoadConfigBtn, {ImageColor3 = mainColor}, 0.2)
+				SaveText.Text = name
+			end
+		end)
+
+		return row
+	end
+
+	-- ── Refresh main list ─────────────────────────────────────────
+	local function RefreshConfigList()
+		activeRow = nil
+		activeLoadBtn = nil
+		for _, c in ipairs(ListContainer:GetChildren()) do
+			if c:IsA("Frame") and c.Name ~= "Space" then c:Destroy() end
+		end
+		local list = ListConfigs()
+		for _, n in ipairs(list) do
+			MakeConfigButton(n)
+		end
+
+	end
+
+	-- ── InsertConfig button ───────────────────────────────────────
+	local insertMode = false
+	InsertConfigBtn.MouseButton1Click:Connect(function()
+		insertMode = not insertMode
+		SearchContainer.Visible = not insertMode
+		NameInputContainer.Visible = insertMode
+		if insertMode then
+			Tween(InsertConfigBtn, {ImageColor3 = mainColor}, 0.2)
+			task.spawn(function() NameOfConfig:CaptureFocus() end)
+		else
+			Tween(InsertConfigBtn, {ImageColor3 = Color3.fromRGB(200, 200, 220)}, 0.2)
+		end
+	end)
+
+	ConfirmAddBtn.MouseButton1Click:Connect(function()
+		local n = NameOfConfig.Text
+		if n == "" then n = "Config " .. tostring(#ListContainer:GetChildren()) end
+		NameOfConfig.Text = ""
+		SaveNamedConfig(n)
+		MakeConfigButton(n)
+		insertMode = false
+		SearchContainer.Visible = true
+		NameInputContainer.Visible = false
+		Tween(InsertConfigBtn, {ImageColor3 = Color3.fromRGB(200, 200, 220)}, 0.2)
+	end)
+
+	-- ── Search filter ─────────────────────────────────────────────
+	SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+		local query = SearchBox.Text:lower()
+		for _, c in ipairs(ListContainer:GetChildren()) do
+			if c:IsA("Frame") and c.Name ~= "Space" then
+				local rename = c:FindFirstChild("Rename")
+				if rename then
+					c.Visible = rename.Text:lower():find(query, 1, true) ~= nil
+				end
+			end
+		end
+	end)
+
+	-- ── AutoSave toggle ───────────────────────────────────────────
+	-- AutoSave: saves the currently loaded config to file on a 30s loop
+	-- so settings persist across rejoin. Also saves immediately on enable.
+	AutoSaveBtn.MouseButton1Click:Connect(function()
+		autoSaveEnabled = not autoSaveEnabled
+		if autoSaveEnabled then
+			Tween(AutoSaveBtn, {ImageColor3 = mainColor}, 0.2)
+			-- Immediate save when toggled on
+			if activeRow then
+				SaveNamedConfig(SaveText.Text)
+			end
+		else
+			Tween(AutoSaveBtn, {ImageColor3 = Color3.fromRGB(200, 200, 220)}, 0.2)
+		end
+	end)
+
+	-- Auto-save loop: periodically saves the active config so it
+	-- persists between sessions (load it next time with the Load button)
+	task.spawn(function()
+		while true do
+			task.wait(30)
+			if autoSaveEnabled and activeRow then
+				local n = SaveText.Text
+				if n ~= "Save" and n ~= "" then
+					SaveNamedConfig(n)
+				end
+			end
+		end
+	end)
+
+	-- Also save on character removing (best-effort "on close")
+	LocalPlayer.CharacterRemoving:Connect(function()
+		if autoSaveEnabled and activeRow then
+			local n = SaveText.Text
+			if n ~= "Save" and n ~= "" then
+				SaveNamedConfig(n)
+			end
+		end
+	end)
+
+	-- ── Recently Deleted button ───────────────────────────────────
+	RecentlyDeletedBtn.MouseButton1Click:Connect(function()
+		-- Fade out main panel, show deleted panel
+		Tween(ConfigMainFrame, {BackgroundTransparency = 1}, 0.2)
+		task.delay(0.22, function()
+			ConfigMainFrame.Visible = false
+			RefreshDeletedList()
+			RecentlyDeletedPanel.Visible = true
+			RecentlyDeletedPanel.BackgroundTransparency = 1
+			Tween(RecentlyDeletedPanel, {BackgroundTransparency = 0.01}, 0.2)
+		end)
+	end)
+
+	local configOpen = false
+	local function closeConfigPanel()
+		configOpen = false
+		Tween(ConfigMainFrame, {BackgroundTransparency = 1}, 0.2)
+		Tween(RecentlyDeletedPanel, {BackgroundTransparency = 1}, 0.2)
+		--Tween(SaveArrow, {Rotation = 0}, 0.2)
+		task.delay(0.22, function()
+			ConfigMainFrame.Visible = false
+			RecentlyDeletedPanel.Visible = false
+		end)
+	end
+	TriggerSaveConfig.MouseButton1Click:Connect(function()
+		configOpen = not configOpen
+		if configOpen then
+			CloseAllPopupsExcept(ConfigMainFrame)
+			RecentlyDeletedPanel.Visible = false
+			RecentlyDeletedPanel.BackgroundTransparency = 1
+			RefreshConfigList()
+			ConfigMainFrame.BackgroundTransparency = 1
+			ConfigMainFrame.Visible = true
+			Tween(ConfigMainFrame, {BackgroundTransparency = 0.01}, 0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+			--Tween(SaveArrow, {Rotation = 90}, 0.2)
+		else
+			closeConfigPanel()
+		end
+	end)
+
+
+
+
+
+	local Line3 = Instance.new('Frame')
+	Line3.Name = "Line3"
+	Line3.Position = UDim2.new(-0.009999999776482582,0,0,0)
+	Line3.Size = UDim2.new(0,1,1,0)
+	Line3.BackgroundColor3 = Color3.fromRGB(162,162,162)
+	Line3.BackgroundTransparency = 0.800000011920929
+	Line3.BorderSizePixel = 0
+	Line3.Parent = Frame2
+
+local Line9 = Instance.new('Frame')
+Line9.Name = "Line9"
+Line9.Position = UDim2.new(0.22900649905204773,0,0.07999999821186066,0)
+Line9.Size = UDim2.new(0.7600772976875305,0,0,1)
+Line9.BackgroundColor3 = Color3.fromRGB(162,162,162)
+Line9.BackgroundTransparency = 0.800000011920929
+Line9.BorderSizePixel = 0
+Line9.Parent = MainFrame
+
+	local Line1 = Instance.new('Frame')
+	Line1.Name = "Line1"
+	Line1.Position = UDim2.new(0.009999999776482582,0,0.08,0)
+	Line1.Size = UDim2.new(0.20900000631809235,0,0,1)
+	Line1.BackgroundColor3 = Color3.fromRGB(162,162,162)
+	Line1.BackgroundTransparency = 0.800000011920929
+	Line1.BorderSizePixel = 0
+	Line1.Parent = MainFrame
+
+	local Line4 = Instance.new('Frame')
+	Line4.Name = "Line4"
+	Line4.Position = UDim2.new(0.00800000037997961,0,0.8999999761581421,0)
+	Line4.Size = UDim2.new(0.20900000631809235,0,0,1)
+	Line4.BackgroundColor3 = Color3.fromRGB(162,162,162)
+	Line4.BackgroundTransparency = 0.800000011920929
+	Line4.BorderSizePixel = 0
+	Line4.Parent = MainFrame
+
+	
+	local DragStrip = New("TextButton", {
+		Name = "DragStrip",
+		Position = UDim2.new(0, 0, 0, 0),
+		Size = UDim2.new(0.215, 0, 0.08, 0),
+		BackgroundTransparency = 1,
+		Text = "",
+		ZIndex = 3,
+	}, MainFrame)
+	MakeDraggable(DragStrip, MainFrame)
 
 	
 	local ToggleBtn = Instance.new("TextButton")
 	ToggleBtn.Name = "ToggleBtn"
 	ToggleBtn.Position = UDim2.new(0, 10, 0, 10)
-	ToggleBtn.BackgroundTransparency = 1
-	ToggleBtn.Active = true
-	ToggleBtn.Draggable = true
-	ToggleBtn.Size = UDim2.new(0, 110, 0, 32)
-	ToggleBtn.BackgroundColor3 = Color3.fromRGB(16,19,28)
-	ToggleBtn.BorderSizePixel = 0
-	ToggleBtn.Text = "Close  [H]"
+   ToggleBtn.BackgroundTransparency = 1
+   ToggleBtn.Active = true
+   ToggleBtn.Draggable = true
+	ToggleBtn.Size = UDim2.new(0, 100, 0, 28)
+	ToggleBtn.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+	ToggleBtn.BorderSizePixel = 1
+	ToggleBtn.Text = "Open  [H]"
 	ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 	ToggleBtn.TextScaled = true
 	ToggleBtn.Font = Enum.Font.SourceSansSemibold
 	ToggleBtn.ZIndex = 999
-	ToggleBtn.Visible = false -- Hidden initially until GUI loads
 	ToggleBtn.Parent = NeverloseCS2
+	ToggleBtn.Visible = false
 	do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 8); c.Parent = ToggleBtn end
-	do local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(40,44,65); s.Transparency = 0.5; s.Parent = ToggleBtn end
-
+	
 local DropShadow = Instance.new("ImageLabel")
 DropShadow.Name = "DropShadow"
 	DropShadow.Parent = ToggleBtn
@@ -697,7 +1688,7 @@ DropShadow.Name = "DropShadow"
 	DropShadow.Size = UDim2.new(1, 47, 1, 47)
 	DropShadow.ZIndex = -1
 	DropShadow.Image = "rbxassetid://6014261993"
-	DropShadow.ImageColor3 = Color3.fromRGB(12,14,22)
+	DropShadow.ImageColor3 = Color3.fromRGB(12, 12, 12)
 	DropShadow.ImageTransparency = 0
 	DropShadow.ScaleType = Enum.ScaleType.Slice
 	DropShadow.SliceCenter = Rect.new(49, 49, 450, 450)
@@ -707,39 +1698,35 @@ DropShadow.Name = "DropShadow"
 
 	local guiOpen = true
 	local function toggleGui()
-    guiOpen = not guiOpen
-    ToggleBtn.Text = guiOpen and "Close [H]" or "Open  [H]"
-    Tween(ToggleBtn, {
-        BackgroundColor3 = guiOpen and Color3.fromRGB(16,19,28) or Color3.fromRGB(33,37,53)
-    }, 0.1)
-    if guiOpen then
-        MainFrame.BackgroundTransparency = 1
-        MainFrame.Visible = true
-        AcrylicBlur.Instances.Part.Transparency = 1
-        AcrylicBlur.Instances.DepthOfField.Enabled = true
-        AcrylicBlur.Signal = game:GetService("RunService").RenderStepped:Connect(AcrylicBlur.Update)
-        Tween(MainFrame, { BackgroundTransparency = 0.2 }, 0.12)
-        Tween(AcrylicBlur.Instances.Part, { Transparency = 0.8 }, 0.12)
-    else
-        if AcrylicBlur.Signal then
-            AcrylicBlur.Signal:Disconnect()
-            AcrylicBlur.Signal = nil
-        end
-        Tween(MainFrame, { BackgroundTransparency = 1 }, 0.12)
-        Tween(AcrylicBlur.Instances.Part, { Transparency = 1 }, 0.12)
-        task.delay(0.13, function()
-            MainFrame.Visible = false
-            AcrylicBlur.Instances.DepthOfField.Enabled = false
-        end)
-    end
-end
+		guiOpen = not guiOpen
+		if guiOpen then
+			ToggleBtn.Visible = false
+			MainFrame.BackgroundTransparency = 1
+			MainFrame.Visible = true
+			AcrylicBlur.Instances.Part.Transparency = 1
+			AcrylicBlur.Instances.DepthOfField.Enabled = true
+			AcrylicBlur.Signal = game:GetService("RunService").RenderStepped:Connect(AcrylicBlur.Update)
+			Tween(MainFrame, { BackgroundTransparency = 0.2 }, 0.12)
+			Tween(AcrylicBlur.Instances.Part, { Transparency = 0.8 }, 0.12)
+		else
+			if AcrylicBlur.Signal then
+				AcrylicBlur.Signal:Disconnect()
+				AcrylicBlur.Signal = nil
+			end
+			Tween(MainFrame, { BackgroundTransparency = 1 }, 0.12)
+			Tween(AcrylicBlur.Instances.Part, { Transparency = 1 }, 0.12)
+			task.delay(0.13, function()
+				MainFrame.Visible = false
+				AcrylicBlur.Instances.DepthOfField.Enabled = false
+				ToggleBtn.Text = "Open  [H]"
+				ToggleBtn.Visible = true
+			end)
+		end
+	end
 
-	-- Show toggle button only after GUI is fully loaded
-	task.defer(function()
-		task.wait(0.5)
-		ToggleBtn.Visible = true
+	CloseBtn.MouseButton1Click:Connect(function()
+		if guiOpen then toggleGui() end
 	end)
-
 	ToggleBtn.MouseButton1Click:Connect(toggleGui)
 
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)
@@ -763,7 +1750,7 @@ end
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
 			Text = text,
-			TextColor3 = Color3.fromRGB(75, 78, 98),
+			TextColor3 = Color3.fromRGB(115, 115, 115),
 			TextScaled = true,
 			Font = Enum.Font.SourceSansSemibold,
          TextTransparency = 0.3,
@@ -785,7 +1772,7 @@ end
 		local TabButtonFrame = New("Frame", {
 			Name = "TabButton",
 			Size = UDim2.new(1, 0, 0.028999999165534973, 0),
-			BackgroundColor3 = isFirst and Color3.fromRGB(255,255,255) or Color3.fromRGB(25,28,42),
+			BackgroundColor3 = isFirst and Color3.fromRGB(255,255,255) or Color3.fromRGB(28, 28, 28),
 			BackgroundTransparency = isFirst and 0.9 or 1,
 			LayoutOrder = tabOrder,
 		}, Tab)
@@ -937,7 +1924,7 @@ SectionLabel.BackgroundColor3 = Color3.fromRGB(162,162,162)
 SectionLabel.BackgroundTransparency = 1
 SectionLabel.BorderSizePixel = 0
 SectionLabel.Text = title
-SectionLabel.TextColor3 = Color3.fromRGB(75, 78, 98)
+SectionLabel.TextColor3 = Color3.fromRGB(115, 115, 115)
 SectionLabel.TextScaled = true
 SectionLabel.Font = Enum.Font.Legacy
 SectionLabel.TextTransparency = 0.20000000298023224
@@ -954,7 +1941,7 @@ UIAspectRatioConstraint_2.Parent = SectionLabel
 			local Elements = New("Frame", {
 				Name = "Elements",
 				Size = UDim2.new(1, 0, 0, 30),
-				BackgroundColor3 = Color3.fromRGB(21,24,35),
+				BackgroundColor3 = Color3.fromRGB(24, 24, 24),
 				BackgroundTransparency = 0.26,
 				BorderSizePixel = 0,
 				AutomaticSize = Enum.AutomaticSize.Y,
@@ -1007,7 +1994,7 @@ UIStroke.Parent = Elements
 				SettingsFrame.Name = "SettingsFrame"
 				SettingsFrame.Position = UDim2.new(1, 4, 0, 0)
 				SettingsFrame.Size = UDim2.new(1, 0, 0, 20)
-				SettingsFrame.BackgroundColor3 = Color3.fromRGB(17,20,30)
+				SettingsFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 				SettingsFrame.BackgroundTransparency = 1
 				SettingsFrame.BorderSizePixel = 0
 				SettingsFrame.Visible = false
@@ -1022,7 +2009,7 @@ UIStroke.Parent = Elements
 
 				local UIStroke = Instance.new('UIStroke')
 				UIStroke.Name = "UIStroke"
-				UIStroke.Color = Color3.fromRGB(40,44,65)
+				UIStroke.Color = Color3.fromRGB(52, 52, 52)
 				UIStroke.Transparency = 0.9
 				UIStroke.Parent = SettingsFrame
 
@@ -1132,7 +2119,7 @@ UIAspectRatioConstraint.Parent = Toggle
 						Name = "TextToggle",
 						Position = UDim2.new(0.04800000086426735, 0, 0.30000001192092896, 0),
 						Size = UDim2.new(0.6600000262260437, 0, 0.6000000238418579, 0),
-						BackgroundColor3 = Color3.fromRGB(28,32,48),
+						BackgroundColor3 = Color3.fromRGB(34, 34, 34),
 						BackgroundTransparency = 1,
 						Text = text,
 						TextColor3 = Color3.fromRGB(255, 255, 255),
@@ -1228,7 +2215,7 @@ UIAspectRatioConstraint.Parent = Toggle
 						Name = "TextToggle",
 						Position = UDim2.new(0.15, 0, 0.30000001192092896, 0),
 						Size = UDim2.new(0.6600000262260437, 0, 0.6000000238418579, 0),
-						BackgroundColor3 = Color3.fromRGB(28,32,48),
+						BackgroundColor3 = Color3.fromRGB(34, 34, 34),
 						BackgroundTransparency = 1,
 						Text = text,
 						TextColor3 = Color3.fromRGB(255, 255, 255),
@@ -1261,151 +2248,10 @@ UIAspectRatioConstraint.Parent = Toggle
 					return obj
 				end
 
-				function SettingsObj:AddSlider(text, min, max, default, callback, suffix)
-					settingsElemCount = settingsElemCount + 1
-					if type(suffix) ~= "string" then suffix = "" end
-					min = min or 0
-					max = max or 100
-					local value = math.clamp(default or min, min, max)
-					local initRatio = (value - min) / (max - min)
-					local dragging = false
-
-					local Slider = New("Frame", {
-						Name = "Slider",
-						Size = UDim2.new(1, 0, 0.20000000298023224, 0),
-						BackgroundColor3 = Color3.fromRGB(162, 162, 162),
-						BackgroundTransparency = 1,
-						LayoutOrder = settingsElemCount,
-						ZIndex = 1000,
-					}, SettingsFrame_Container)
-
-local UIAspectRatioConstraint = Instance.new('UIAspectRatioConstraint')
-UIAspectRatioConstraint.Name = "UIAspectRatioConstraint"
-UIAspectRatioConstraint.AspectRatio = 7.5
-UIAspectRatioConstraint.AspectType = Enum.AspectType.ScaleWithParentSize
-UIAspectRatioConstraint.Parent = Slider
-
-					New("Frame", {
-						Name = "Lines",
-						Position = UDim2.new(0.05, 0, 1, 0),
-						Size = UDim2.new(0.9, 0, 0, 1),
-						BackgroundColor3 = Color3.fromRGB(162, 162, 162),
-						BackgroundTransparency = 0.900000011920929,
-						ZIndex = 1002,
-						BorderSizePixel = 0,
-					}, Slider)
-
-					New("TextLabel", {
-						Name = "TextToggle",
-						Position = UDim2.new(0.04800000086426735, 0, 0.30000001192092896, 0),
-						Size = UDim2.new(0.6600000262260437, 0, 0.6000000238418579, 0),
-						BackgroundColor3 = Color3.fromRGB(28,32,48),
-						BackgroundTransparency = 1,
-						Text = text,
-						TextColor3 = Color3.fromRGB(255, 255, 255),
-						TextScaled = true,
-						Font = Enum.Font.SourceSansSemibold,
-						TextTransparency = 0.10000000149011612,
-						TextXAlignment = Enum.TextXAlignment.Left,
-						ZIndex = 1001,
-					}, Slider)
-
-					local Effect = New("Frame", {
-						Name = "Effect",
-						Position = UDim2.new(0.4980000042915344, 0, 0.25, 0),
-						Size = UDim2.new(0.5, 0, 0.6990000009536743, 0),
-						BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-						BackgroundTransparency = 1,
-						ZIndex = 1001,
-					}, Slider)
-
-					local SliderValue = New("TextLabel", {
-						Name = "SliderValue",
-						Position = UDim2.new(0.6990000009536743, 0, 0.10000000149011612, 0),
-						Size = UDim2.new(0.25, 0, 0.8080000281333923, 0),
-						BackgroundColor3 = Color3.fromRGB(33,37,53),
-						Text = tostring(value) .. suffix,
-						TextColor3 = Color3.fromRGB(255, 255, 255),
-						TextScaled = true,
-						Font = Enum.Font.SourceSansSemibold,
-						TextTransparency = 0.20000000298023224,
-						ZIndex = 1002,
-					}, Effect)
-					New("UICorner", { CornerRadius = UDim.new(0, 5) }, SliderValue)
-
-					local Line = New("Frame", {
-						Name = "Line",
-						Position = UDim2.new(0.03999999910593033, 0, 0.3190000057220459, 0),
-						Size = UDim2.new(0.6000000238418579, 0, 0.24, 0),
-						BackgroundColor3 = Color3.fromRGB(33,37,53),
-						ZIndex = 1001,
-					}, Effect)
-					New("UICorner", { CornerRadius = UDim.new(1, 0) }, Line)
-
-					local InLine = New("Frame", {
-						Name = "InLine",
-						Size = UDim2.new(0, 0, 1, 0),
-						BackgroundColor3 = mainColor,
-						ZIndex = 1002,
-					}, Line)
-					New("UICorner", { CornerRadius = UDim.new(1, 0) }, InLine)
-
-					local Trigger = New("TextButton", {
-						Name = "Trigger",
-						Position = UDim2.new(0.10000000149011612, 0, -1.8000000715255737, 0),
-						Size = UDim2.new(1.1999999284744263, 0, 4.200000286102295, 0),
-						AnchorPoint = Vector2.new(0.800000011920929, 0),
-						BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-						BackgroundTransparency = 1,
-						Text = "",
-						ZIndex = 1003,
-					}, Line)
-					New("UICorner", { CornerRadius = UDim.new(1, 0) }, Trigger)
-					New("UIAspectRatioConstraint", {}, Trigger)
-
-					task.defer(function()
-						InLine.Size = UDim2.fromScale(initRatio, 1)
-						Trigger.Position = UDim2.new(initRatio, 0, -1.8000000715255737, 0)
-					end)
-
-					local function update(input)
-						local sizeScale = math.clamp((input.Position.X - Line.AbsolutePosition.X) / Line.AbsoluteSize.X, 0, 1)
-						value = math.floor(((max - min) * sizeScale) + min)
-						Tween(InLine, { Size = UDim2.fromScale(sizeScale, 1) }, 0.1)
-						Trigger.Position = UDim2.new(sizeScale, 0, -1.8000000715255737, 0)
-						SliderValue.Text = tostring(value) .. suffix
-						if callback then callback(value) end
-					end
-
-					Line.InputBegan:Connect(function(input)
-						if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-							dragging = true; update(input)
-						end
-					end)
-					UserInputService.InputEnded:Connect(function(input)
-						if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-							dragging = false
-						end
-					end)
-					UserInputService.InputChanged:Connect(function(input)
-						if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-							update(input)
-						end
-					end)
-
-					local obj = {}
-					function obj:Set(val)
-						value = math.clamp(val, min, max)
-						local ratio = (value - min) / (max - min)
-						InLine.Size = UDim2.fromScale(ratio, 1)
-						Trigger.Position = UDim2.new(ratio, 0, -1.8000000715255737, 0)
-						SliderValue.Text = tostring(value) .. suffix
-						if callback then callback(value) end
-					end
-					function obj:Get() return value end
-					table.insert(_registeredElements, { key = "settings_slider_" .. text, obj = obj })
-					return obj
-				end
+							function SettingsObj:AddSlider(text, min, max, default, callback, suffix, decimals)
+				settingsElemCount = settingsElemCount + 1
+				return CreateSliderRow(SettingsFrame_Container, settingsElemCount, text, min, max, default, callback, suffix, decimals, 1000, 7.5, "settings_slider_" .. text)
+			end
 
 				function SettingsObj:AddDropdown(text, options, default, callback)
 					if type(default) == "function" then callback = default; default = nil end
@@ -1442,7 +2288,7 @@ UIAspectRatioConstraint.Parent = Slider
 						Name = "TextToggle",
 						Position = UDim2.new(0.04800000041723251, 0, 0.30000001192092896, 0),
 						Size = UDim2.new(0.6000000238418579, 0, 0.6000000238418579, 0),
-						BackgroundColor3 = Color3.fromRGB(28,32,48),
+						BackgroundColor3 = Color3.fromRGB(34, 34, 34),
 						BackgroundTransparency = 1,
 						Text = text,
 						TextColor3 = Color3.fromRGB(255, 255, 255),
@@ -1457,7 +2303,7 @@ UIAspectRatioConstraint.Parent = Slider
 						Name = "TextArrow",
 						Position = UDim2.new(0.8700000047683716, 0, 0.15000000596046448, 0),
 						Size = UDim2.new(0.10000000149011612, 0, 0.800000011920929, 0),
-						BackgroundColor3 = Color3.fromRGB(28,32,48),
+						BackgroundColor3 = Color3.fromRGB(34, 34, 34),
 						BackgroundTransparency = 1,
 						Image = "rbxassetid://10709790948",
 						ImageColor3 = Color3.fromRGB(255, 255, 255),
@@ -1471,7 +2317,7 @@ UIAspectRatioConstraint.Parent = Slider
 						Name = "TextDefault",
 						Position = UDim2.new(0.6400001645088196, 0, 0.2499999850988388, 0),
 						Size = UDim2.new(0.23000000417232513, 0, 0.6000000238418579, 0),
-						BackgroundColor3 = Color3.fromRGB(28,32,48),
+						BackgroundColor3 = Color3.fromRGB(34, 34, 34),
 						BackgroundTransparency = 1,
 						Text = options[1] or "Auto",
 						TextColor3 = Color3.fromRGB(255, 255, 255),
@@ -1486,7 +2332,7 @@ UIAspectRatioConstraint.Parent = Slider
 						Name = "Dropdown",
 						Position = UDim2.new(1, 0, 0, 0),
 						Size = UDim2.new(0.6899999737739563, 0, 0, 100),
-						BackgroundColor3 = Color3.fromRGB(16,19,28),
+						BackgroundColor3 = Color3.fromRGB(18, 18, 18),
 						BackgroundTransparency = 1,
 						BorderSizePixel = 0,
 						Visible = false,
@@ -1494,7 +2340,7 @@ UIAspectRatioConstraint.Parent = Slider
 					}, Selection)
 					New("UICorner", { CornerRadius = UDim.new(0, 5) }, DropPopup)
 					New("UIStroke", {
-						Color = Color3.fromRGB(28,32,48),
+						Color = Color3.fromRGB(34, 34, 34),
 						Transparency = 0.800000011920929,
 						ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 					}, DropPopup)
@@ -1510,7 +2356,7 @@ UIAspectRatioConstraint.Parent = Slider
 					}, DropPopup)
 					New("UICorner", { CornerRadius = UDim.new(0, 5) }, DropContainer)
 					New("UIStroke", {
-						Color = Color3.fromRGB(28,32,48),
+						Color = Color3.fromRGB(34, 34, 34),
 						Transparency = 0.800000011920929,
 						ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 					}, DropContainer)
@@ -1567,11 +2413,11 @@ UIAspectRatioConstraint.Parent = Slider
 							Name = "Selected",
 							Position = UDim2.new(0.800000011920929, 0, 0, 0),
 							Size = UDim2.new(0.20000000298023224, 0, 0.800000011920929, 0),
-							BackgroundColor3 = Color3.fromRGB(16,19,28),
+							BackgroundColor3 = Color3.fromRGB(18, 18, 18),
 							BackgroundTransparency = 1,
 							BorderSizePixel = 0,
 							Text = "",
-							TextColor3 = Color3.fromRGB(26, 123, 255),
+							TextColor3 = Color3.fromRGB(255, 255, 255),
 							TextScaled = true,
 							ZIndex = 1004,
 						}, BtnRow)
@@ -1684,7 +2530,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 						Name = "colorpickerFrame",
 						Position = UDim2.new(1.1, 0, 0, 0),
 						Size = UDim2.new(1, 0, 7, 0),
-						BackgroundColor3 = Color3.fromRGB(15,17,26),
+						BackgroundColor3 = Color3.fromRGB(16, 16, 16),
 						BorderSizePixel = 0,
 						Visible = false,
 						ZIndex = 1350,
@@ -1739,7 +2585,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 					New("UICorner", { CornerRadius = UDim.new(1, 0) }, DarknessCircle)
 
 					local colorHex = New("TextLabel", {
-						BackgroundColor3 = Color3.fromRGB(15,17,26),
+						BackgroundColor3 = Color3.fromRGB(16, 16, 16),
 						Position = UDim2.new(0.0717131495, 0, 0.855, 0),
 						Size = UDim2.new(0.44, 0, 0.09, 0),
 						Font = Enum.Font.ArialBold,
@@ -1751,7 +2597,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 					New("UICorner", { CornerRadius = UDim.new(0, 4) }, colorHex)
 
 					local Copy = New("TextButton", {
-						BackgroundColor3 = Color3.fromRGB(15,17,26),
+						BackgroundColor3 = Color3.fromRGB(16, 16, 16),
 						Position = UDim2.new(0.54, 0, 0.855, 0),
 						Size = UDim2.new(0.39, 0, 0.09, 0),
 						AutoButtonColor = false,
@@ -1925,7 +2771,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 					Name = "TextToggle",
 					Position = UDim2.new(0.04800000086426735, 0, 0.3, 0),
 					Size = UDim2.new(0.6600000262260437, 0, 0.5000000238418579, 0),
-					BackgroundColor3 = Color3.fromRGB(28,32,48),
+					BackgroundColor3 = Color3.fromRGB(34, 34, 34),
 					BackgroundTransparency = 1,
 					Text = text,
 					TextColor3 = Color3.fromRGB(255, 255, 255),
@@ -2027,7 +2873,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 					Name = "TextToggle",
 					Position = UDim2.new(0.02800000086426735, 0, 0.30000001192092896, 0),
 					Size = UDim2.new(0.6600000262260437, 0, 0.500000238418579, 0),
-					BackgroundColor3 = Color3.fromRGB(28,32,48),
+					BackgroundColor3 = Color3.fromRGB(34, 34, 34),
 					BackgroundTransparency = 1,
 					Text = text,
 					TextColor3 = Color3.fromRGB(255, 255, 255),
@@ -2101,7 +2947,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 					Name = "TextToggle",
 					Position = UDim2.new(0.04800000086426735, 0, 0.30000001192092896, 0),
 						Size = UDim2.new(0.6000000238418579, 0, 0.5000000238418579, 0),
-					BackgroundColor3 = Color3.fromRGB(28,32,48),
+					BackgroundColor3 = Color3.fromRGB(34, 34, 34),
 					BackgroundTransparency = 1,
 					Text = text,
 					TextColor3 = Color3.fromRGB(255, 255, 255),
@@ -2149,7 +2995,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 					Name = "Frame",
 					Position = UDim2.new(1.100000023841858, 0, 0, 0),
 					Size = UDim2.new(1, 0, 7, 0),
-					BackgroundColor3 = Color3.fromRGB(15,17,26),
+					BackgroundColor3 = Color3.fromRGB(16, 16, 16),
 					BorderSizePixel = 0,
 					Visible = false,
 					ZIndex = 350,
@@ -2203,7 +3049,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 
 				local colorHex = New("TextLabel", {
 					Name = "Hex",
-					BackgroundColor3 = Color3.fromRGB(15,17,26),
+					BackgroundColor3 = Color3.fromRGB(16, 16, 16),
 					Position = UDim2.new(0.0717131495475769, 0, 0.8550000190734863, 0),
 					Size = UDim2.new(0.4399999976158142, 0, 0.09000000357627869, 0),
 					Font = Enum.Font.ArialBold,
@@ -2216,7 +3062,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 
 				local Copy = New("TextButton", {
 					Name = "Copy",
-					BackgroundColor3 = Color3.fromRGB(15,17,26),
+					BackgroundColor3 = Color3.fromRGB(16, 16, 16),
 					Position = UDim2.new(0.5400000214576721, 0, 0.8550000190734863, 0),
 					Size = UDim2.new(0.38999998569488525, 0, 0.09000000357627869, 0),
 					AutoButtonColor = false,
@@ -2377,206 +3223,9 @@ UIAspectRatioConstraint.Parent = Colorpicker
 				return obj
 			end
 
-			function SectionObj:AddSlider(text, min, max, default, callback, suffix)
+						function SectionObj:AddSlider(text, min, max, default, callback, suffix, decimals)
 				elemCount = elemCount + 1
-				if type(suffix) ~= "string" then suffix = "" end
-				min = min or 0
-				max = max or 100
-				local value = math.clamp(default or min, min, max)
-				local initRatio = (value - min) / (max - min)
-				local dragging = false
-				local isDecimal = false
-
-				-- Check if min/max have decimals to determine decimal support
-				if (min % 1 ~= 0) or (max % 1 ~= 0) or (default % 1 ~= 0) then
-					isDecimal = true
-				end
-
-				local function formatValue(val)
-					if isDecimal then
-						return string.format("%.2f", val)
-					else
-						return tostring(math.floor(val))
-					end
-				end
-
-				local Slider = New("Frame", {
-					Name = "Slider",
-					Size = UDim2.new(1, 0, 0.20000000298023224, 0),
-					BackgroundColor3 = Color3.fromRGB(162, 162, 162),
-					BackgroundTransparency = 1,
-					LayoutOrder = elemCount,
-				}, Elements)
-				New("UIAspectRatioConstraint", {
-					AspectRatio = 9,
-					AspectType = Enum.AspectType.ScaleWithParentSize,
-				}, Slider)
-
-				New("Frame", {
-					Name = "Lines",
-					Position = UDim2.new(0.05, 0, 1, 0),
-					Size = UDim2.new(0.9, 0, 0, 1),
-					BackgroundColor3 = Color3.fromRGB(162, 162, 162),
-					BackgroundTransparency = 0.900000011920929,
-					ZIndex = 100,
-					BorderSizePixel = 0,
-				}, Slider)
-
-				New("TextLabel", {
-					Name = "TextToggle",
-					Position = UDim2.new(0.04800000086426735, 0, 0.30000001192092896, 0),
-					Size = UDim2.new(0.6600000262260437, 0, 0.5000000238418579, 0),
-					BackgroundColor3 = Color3.fromRGB(28,32,48),
-					BackgroundTransparency = 1,
-					Text = text,
-					TextColor3 = Color3.fromRGB(255, 255, 255),
-					TextScaled = true,
-					Font = Enum.Font.SourceSansSemibold,
-					TextTransparency = 0.10000000149011612,
-					TextXAlignment = Enum.TextXAlignment.Left,
-				}, Slider)
-
-				local Effect = New("Frame", {
-					Name = "Effect",
-					Position = UDim2.new(0.4980000042915344, 0, 0.25, 0),
-					Size = UDim2.new(0.5, 0, 0.6990000009536743, 0),
-					BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-					BackgroundTransparency = 1,
-				}, Slider)
-
-				-- Replace SliderValue label with TextBox for manual input
-				local SliderValue = New("TextBox", {
-					Name = "SliderValue",
-					Position = UDim2.new(0.6990000009536743, 0, 0.10000000149011612, 0),
-					Size = UDim2.new(0.25, 0, 0.8080000281333923, 0),
-					BackgroundColor3 = Color3.fromRGB(32, 35, 50),
-					Text = formatValue(value) .. suffix,
-					TextColor3 = Color3.fromRGB(255, 255, 255),
-					TextScaled = true,
-					Font = Enum.Font.SourceSansSemibold,
-					TextTransparency = 0.20000000298023224,
-					ClearTextOnFocus = false,
-					PlaceholderText = "0",
-					PlaceholderColor3 = Color3.fromRGB(178, 178, 178),
-				}, Effect)
-				New("UICorner", { CornerRadius = UDim.new(0, 5) }, SliderValue)
-
-				local Line = New("Frame", {
-					Name = "Line",
-					Position = UDim2.new(0.03999999910593033, 0, 0.3190000057220459, 0),
-					Size = UDim2.new(0.6000000238418579, 0, 0.15000000596046448, 0),
-					BackgroundColor3 = Color3.fromRGB(33,37,53),
-				}, Effect)
-				New("UICorner", { CornerRadius = UDim.new(1, 0) }, Line)
-
-				local InLine = New("Frame", {
-					Name = "InLine",
-					Size = UDim2.new(0, 0, 1, 0),
-					BackgroundColor3 = mainColor,
-					ZIndex = 2,
-				}, Line)
-				New("UICorner", { CornerRadius = UDim.new(1, 0) }, InLine)
-
-				local Trigger = New("TextButton", {
-					Name = "Trigger",
-					Position = UDim2.new(0.10000000149011612, 0, -1.8000000715255737, 0),
-					Size = UDim2.new(1.1999999284744263, 0, 4.200000286102295, 0),
-					AnchorPoint = Vector2.new(0.800000011920929, 0),
-					BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-					Text = "",
-					ZIndex = 3,
-				}, Line)
-				New("UICorner", { CornerRadius = UDim.new(1, 0) }, Trigger)
-				New("UIAspectRatioConstraint", {}, Trigger)
-
-				task.defer(function()
-					InLine.Size = UDim2.fromScale(initRatio, 1)
-					Trigger.Position = UDim2.new(initRatio, 0, -1.8000000715255737, 0)
-				end)
-
-				local function update(input)
-					local sizeScale = math.clamp((input.Position.X - Line.AbsolutePosition.X) / Line.AbsoluteSize.X, 0, 1)
-					if isDecimal then
-						value = ((max - min) * sizeScale) + min
-						value = math.floor(value * 100) / 100 -- Round to 2 decimals
-					else
-						value = math.floor(((max - min) * sizeScale) + min)
-					end
-					Tween(InLine, { Size = UDim2.fromScale(sizeScale, 1) }, 0.1)
-					Trigger.Position = UDim2.new(sizeScale, 0, -1.8000000715255737, 0)
-					SliderValue.Text = formatValue(value) .. suffix
-					if callback then callback(value) end
-				end
-
-				Line.InputBegan:Connect(function(input)
-					if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-						dragging = true; update(input)
-					end
-				end)
-
-				Trigger.InputBegan:Connect(function(input)
-					if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-						dragging = true; update(input)
-					end
-				end)
-
-				UserInputService.InputEnded:Connect(function(input)
-					if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-						dragging = false
-					end
-				end)
-
-				UserInputService.InputChanged:Connect(function(input)
-					if dragging then
-						if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-							update(input)
-						end
-					end
-				end)
-
-				-- Manual input handling
-				SliderValue.FocusLost:Connect(function(enterPressed)
-					local inputText = SliderValue.Text:gsub(suffix, ""):match("[%d%.%-]+")
-					if inputText then
-						local num = tonumber(inputText)
-						if num then
-							if isDecimal then
-								num = math.floor(num * 100) / 100
-							else
-								num = math.floor(num)
-							end
-							value = math.clamp(num, min, max)
-							local ratio = (value - min) / (max - min)
-							InLine.Size = UDim2.fromScale(ratio, 1)
-							Trigger.Position = UDim2.new(ratio, 0, -1.8000000715255737, 0)
-							SliderValue.Text = formatValue(value) .. suffix
-							if callback then callback(value) end
-						else
-							SliderValue.Text = formatValue(value) .. suffix
-						end
-					else
-						SliderValue.Text = formatValue(value) .. suffix
-					end
-				end)
-
-				local obj = {}
-				function obj:Set(val)
-					if isDecimal then
-						val = math.floor(val * 100) / 100
-					else
-						val = math.floor(val)
-					end
-					value = math.clamp(val, min, max)
-					local ratio = (value - min) / (max - min)
-					InLine.Size = UDim2.fromScale(ratio, 1)
-					Trigger.Position = UDim2.new(ratio, 0, -1.8000000715255737, 0)
-					SliderValue.Text = formatValue(value) .. suffix
-					if callback then callback(value) end
-				end
-				function obj:Get() return value end
-				function obj:AddSettings() return MakeSettings(Slider, "slider", text) end
-				table.insert(_registeredElements, { key = "slider_" .. text, obj = obj })
-				return obj
+				return CreateSliderRow(Elements, elemCount, text, min, max, default, callback, suffix, decimals, 2, 9, "slider_" .. text)
 			end
 
 			function SectionObj:AddDropdown(text, options, default, callback)
@@ -2616,7 +3265,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 					Name = "TextToggle",
 					Position = UDim2.new(0.04800000086426735, 0, 0.30000001192092896, 0),
 					Size = UDim2.new(0.6000000238418579, 0, 0.5000000238418579, 0),
-					BackgroundColor3 = Color3.fromRGB(28,32,48),
+					BackgroundColor3 = Color3.fromRGB(34, 34, 34),
 					BackgroundTransparency = 1,
 					Text = text,
 					TextColor3 = Color3.fromRGB(255, 255, 255),
@@ -2630,7 +3279,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 					Name = "TopBar",
 					Position = UDim2.new(0.498, 0, 0.25, 0),
 			      Size = UDim2.new(0.46, 0, 0.600000024, 0),
-				   BackgroundColor3 = Color3.fromRGB(32, 35, 50),
+				   BackgroundColor3 = Color3.fromRGB(42, 42, 42),
                BackgroundTransparency = 0.3,
 					Text = "Select",
 					TextColor3 = Color3.fromRGB(255, 255, 255),
@@ -2659,7 +3308,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 					Name = "DownBar",
 					Position = UDim2.new(0.56, 0, 0, 0),
 					Size = UDim2.new(0.5, 0, 0, 0),
-					BackgroundColor3 = Color3.fromRGB(16,19,28),
+					BackgroundColor3 = Color3.fromRGB(18, 18, 18),
 					Visible = false,
 					ZIndex = 300,
 					ClipsDescendants = true,
@@ -2696,7 +3345,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 					local Buttons = New("TextButton", {
 						Name = "Buttons",
 						Size = UDim2.new(1, 0, 0, 16),
-						BackgroundColor3 = Color3.fromRGB(32, 35, 50),
+						BackgroundColor3 = Color3.fromRGB(42, 42, 42),
 						BackgroundTransparency = 1,
 						Text = opt,
 						TextColor3 = Color3.fromRGB(255, 255, 255),
@@ -2788,7 +3437,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 					Name = "TextDropdown",
 					Position = UDim2.new(0.04800000086426735, 0, 0.30000001192092896, 0),
 					Size = UDim2.new(0.6000000238418579, 0, 0.5000000238418579, 0),
-					BackgroundColor3 = Color3.fromRGB(28,32,48),
+					BackgroundColor3 = Color3.fromRGB(34, 34, 34),
 					BackgroundTransparency = 1,
 					Text = text,
 					TextColor3 = Color3.fromRGB(255, 255, 255),
@@ -2816,7 +3465,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 					Name = "TopBar",
 					Position = UDim2.new(0.498, 0, 0.25, 0),
 					Size = UDim2.new(0.46, 0, 0.6000000238418579, 0),
-					BackgroundColor3 = Color3.fromRGB(32, 35, 50),
+					BackgroundColor3 = Color3.fromRGB(42, 42, 42),
 					BackgroundTransparency = 0.3,
 					Text = "Select",
 					TextColor3 = Color3.fromRGB(255, 255, 255),
@@ -2846,7 +3495,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 					Name = "DownBar",
 					Position = UDim2.new(0.56, 0, 0, 0),
 					Size = UDim2.new(0.5, 0, 0, 0),
-					BackgroundColor3 = Color3.fromRGB(16,19,28),
+					BackgroundColor3 = Color3.fromRGB(18, 18, 18),
 					ClipsDescendants = true,
 					Visible = false,
 					ZIndex = 300,
@@ -2886,7 +3535,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 					local Btn = New("TextButton", {
 						Name = "Buttons",
 						Size = UDim2.new(1, 0, 0, 16),
-						BackgroundColor3 = Color3.fromRGB(32, 35, 50),
+						BackgroundColor3 = Color3.fromRGB(42, 42, 42),
 						BackgroundTransparency = 1,
 						Text = opt,
 						TextColor3 = Color3.fromRGB(255, 255, 255),
@@ -2938,7 +3587,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 					Name = "colorpickerFrame",
 					Position = UDim2.new(1.1, 0, 0, 0),
 					Size = UDim2.new(1, 0, 7, 0),
-					BackgroundColor3 = Color3.fromRGB(15,17,26),
+					BackgroundColor3 = Color3.fromRGB(16, 16, 16),
 					BorderSizePixel = 0,
 					Visible = false,
 					ZIndex = 350,
@@ -2994,7 +3643,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 
 				local colorHex = New("TextLabel", {
 					Name = "colorHex",
-					BackgroundColor3 = Color3.fromRGB(15,17,26),
+					BackgroundColor3 = Color3.fromRGB(16, 16, 16),
 					Position = UDim2.new(0.0717131495, 0, 0.855, 0),
 					Size = UDim2.new(0.44, 0, 0.09, 0),
 					Font = Enum.Font.ArialBold,
@@ -3007,7 +3656,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 
 				local Copy = New("TextButton", {
 					Name = "Copy",
-					BackgroundColor3 = Color3.fromRGB(15,17,26),
+					BackgroundColor3 = Color3.fromRGB(16, 16, 16),
 					Position = UDim2.new(0.54, 0, 0.855, 0),
 					Size = UDim2.new(0.39, 0, 0.09, 0),
 					AutoButtonColor = false,
@@ -3212,7 +3861,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 					Name = "colorpickerFrame",
 					Position = UDim2.new(1.1, 0, 0, 0),
 					Size = UDim2.new(1, 0, 7, 0),
-					BackgroundColor3 = Color3.fromRGB(15,17,26),
+					BackgroundColor3 = Color3.fromRGB(16, 16, 16),
 					BorderSizePixel = 0,
 					Visible = false,
 					ZIndex = 350,
@@ -3268,7 +3917,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 
 				local colorHex = New("TextLabel", {
 					Name = "colorHex",
-					BackgroundColor3 = Color3.fromRGB(15,17,26),
+					BackgroundColor3 = Color3.fromRGB(16, 16, 16),
 					Position = UDim2.new(0.0717131495, 0, 0.855, 0),
 					Size = UDim2.new(0.44, 0, 0.09, 0),
 					Font = Enum.Font.ArialBold,
@@ -3281,7 +3930,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 
 				local Copy = New("TextButton", {
 					Name = "Copy",
-					BackgroundColor3 = Color3.fromRGB(15,17,26),
+					BackgroundColor3 = Color3.fromRGB(16, 16, 16),
 					Position = UDim2.new(0.54, 0, 0.855, 0),
 					Size = UDim2.new(0.39, 0, 0.09, 0),
 					AutoButtonColor = false,
@@ -3439,7 +4088,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 				local DropdownSection = Instance.new('Frame')
 				DropdownSection.Name = "Accordion"
 				DropdownSection.Size = UDim2.new(1, 0, 0.20000000298023224, 0)
-				DropdownSection.BackgroundColor3 = Color3.fromRGB(21,24,36)
+				DropdownSection.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
 				DropdownSection.BackgroundTransparency = 1
 				DropdownSection.LayoutOrder = elemCount
 				DropdownSection.Parent = Elements
@@ -3467,7 +4116,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 				Text.Name = "Text"
 				Text.Position = UDim2.new(0.04800000041723251, 0, 0.30000001192092896, 0)
 				Text.Size = UDim2.new(0.6600000262260437, 0, 0.5000000238418579, 0)
-				Text.BackgroundColor3 = Color3.fromRGB(28,32,48)
+				Text.BackgroundColor3 = Color3.fromRGB(34, 34, 34)
 				Text.BackgroundTransparency = 1
 				Text.Text = text
 				Text.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -3490,7 +4139,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 				Section2Frame.Name = "AccordionFrame"
 				Section2Frame.Position = UDim2.new(1, 4, 0, 0)
 				Section2Frame.Size = UDim2.new(1, 0, 0, 20)
-				Section2Frame.BackgroundColor3 = Color3.fromRGB(17,20,30)
+				Section2Frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 				Section2Frame.BackgroundTransparency = 1
 				Section2Frame.BorderSizePixel = 0
 				Section2Frame.Visible = false
@@ -3631,7 +4280,7 @@ UIAspectRatioConstraint.Parent = Toggle
 						Name = "TextToggle",
 						Position = UDim2.new(0.04800000086426735, 0, 0.30000001192092896, 0),
 						Size = UDim2.new(0.6600000262260437, 0, 0.6000000238418579, 0),
-						BackgroundColor3 = Color3.fromRGB(28,32,48),
+						BackgroundColor3 = Color3.fromRGB(34, 34, 34),
 						BackgroundTransparency = 1,
 						Text = text2,
 						TextColor3 = Color3.fromRGB(255, 255, 255),
@@ -3727,7 +4376,7 @@ UIAspectRatioConstraint.Parent = Toggle
 						Name = "TextToggle",
 						Position = UDim2.new(0.15, 0, 0.30000001192092896, 0),
 						Size = UDim2.new(0.6600000262260437, 0, 0.6000000238418579, 0),
-						BackgroundColor3 = Color3.fromRGB(28,32,48),
+						BackgroundColor3 = Color3.fromRGB(34, 34, 34),
 						BackgroundTransparency = 1,
 						Text = text2,
 						TextColor3 = Color3.fromRGB(255, 255, 255),
@@ -3801,7 +4450,7 @@ UIAspectRatioConstraint.Parent = Toggle
 						Name = "TextToggle",
 						Position = UDim2.new(0.04800000041723251, 0, 0.30000001192092896, 0),
 						Size = UDim2.new(0.6000000238418579, 0, 0.6000000238418579, 0),
-						BackgroundColor3 = Color3.fromRGB(28,32,48),
+						BackgroundColor3 = Color3.fromRGB(34, 34, 34),
 						BackgroundTransparency = 1,
 						Text = text2,
 						TextColor3 = Color3.fromRGB(255, 255, 255),
@@ -3817,7 +4466,7 @@ UIAspectRatioConstraint.Parent = Toggle
 						Name = "TextArrow",
 						Position = UDim2.new(0.8700000047683716,0,0.15000000596046448,0),
 						Size = UDim2.new(0.10000000149011612, 0, 0.800000011920929, 0),
-						BackgroundColor3 = Color3.fromRGB(28,32,48),
+						BackgroundColor3 = Color3.fromRGB(34, 34, 34),
 						BackgroundTransparency = 1,
 						Image = "rbxassetid://10709790948",
 						ImageColor3 = Color3.fromRGB(255, 255, 255),
@@ -3832,7 +4481,7 @@ UIAspectRatioConstraint.Parent = Toggle
 						Name = "TextDefault",
 						Position = UDim2.new(0.6400001645088196,0,0.2499999850988388,0),
 						Size = UDim2.new(0.23000000417232513, 0, 0.6000000238418579, 0),
-						BackgroundColor3 = Color3.fromRGB(28,32,48),
+						BackgroundColor3 = Color3.fromRGB(34, 34, 34),
 						BackgroundTransparency = 1,
 						Text = options[1] or "Auto",
 						TextColor3 = Color3.fromRGB(255, 255, 255),
@@ -3848,7 +4497,7 @@ UIAspectRatioConstraint.Parent = Toggle
 						Name = "Dropdown",
 						Position = UDim2.new(1, 0, 0, 0),
 						Size = UDim2.new(0.6899999737739563, 0, 0, 100),
-						BackgroundColor3 = Color3.fromRGB(16,19,28),
+						BackgroundColor3 = Color3.fromRGB(18, 18, 18),
 						BackgroundTransparency = 1,
 						BorderSizePixel = 0,
 						Visible = false,
@@ -3856,7 +4505,7 @@ UIAspectRatioConstraint.Parent = Toggle
 					}, Selection)
 					New("UICorner", { CornerRadius = UDim.new(0, 5) }, DropPopup)
 					New("UIStroke", {
-						Color = Color3.fromRGB(28,32,48),
+						Color = Color3.fromRGB(34, 34, 34),
 						Transparency = 0.800000011920929,
 						ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 					}, DropPopup)
@@ -3873,7 +4522,7 @@ UIAspectRatioConstraint.Parent = Toggle
 					}, DropPopup)
 					New("UICorner", { CornerRadius = UDim.new(0, 5) }, DropContainer)
 					New("UIStroke", {
-						Color = Color3.fromRGB(28,32,48),
+						Color = Color3.fromRGB(34, 34, 34),
 						Transparency = 0.800000011920929,
 						ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 					}, DropContainer)
@@ -3931,11 +4580,11 @@ UIAspectRatioConstraint.Parent = Toggle
 							Name = "Selected",
 							Position = UDim2.new(0.800000011920929, 0, 0, 0),
 							Size = UDim2.new(0.20000000298023224, 0, 0.800000011920929, 0),
-							BackgroundColor3 = Color3.fromRGB(16,19,28),
+							BackgroundColor3 = Color3.fromRGB(18, 18, 18),
 							BackgroundTransparency = 1,
 							BorderSizePixel = 0,
 							Text = "",
-							TextColor3 = Color3.fromRGB(26, 123, 255),
+							TextColor3 = Color3.fromRGB(255, 255, 255),
 							TextScaled = true,
 							ZIndex = 1004,
 						}, BtnRow)
@@ -4002,150 +4651,9 @@ UIAspectRatioConstraint.Parent = Toggle
 					return obj
 				end
 
-				function AccordionObj:AddSlider(text2, min, max, default, callback, suffix)
+								function AccordionObj:AddSlider(text2, min, max, default, callback, suffix, decimals)
 					accordionElemCount = accordionElemCount + 1
-					if type(suffix) ~= "string" then suffix = "" end
-					min = min or 0
-					max = max or 100
-					local value = math.clamp(default or min, min, max)
-					local initRatio = (value - min) / (max - min)
-					local dragging = false
-
-					local Slider = New("Frame", {
-						Name = "Slider",
-						Size = UDim2.new(1, 0, 0.20000000298023224, 0),
-						BackgroundColor3 = Color3.fromRGB(162, 162, 162),
-						BackgroundTransparency = 1,
-						LayoutOrder = accordionElemCount,
-						ZIndex = 100,
-					}, Container)
-
-local UIAspectRatioConstraint = Instance.new('UIAspectRatioConstraint')
-UIAspectRatioConstraint.Name = "UIAspectRatioConstraint"
-UIAspectRatioConstraint.AspectRatio = 7.5
-UIAspectRatioConstraint.AspectType = Enum.AspectType.ScaleWithParentSize
-UIAspectRatioConstraint.Parent = Slider
-
-					New("Frame", {
-						Name = "Lines",
-						Position = UDim2.new(0.05, 0, 1, 0),
-						Size = UDim2.new(0.9, 0, 0, 1),
-						BackgroundColor3 = Color3.fromRGB(162, 162, 162),
-						BackgroundTransparency = 0.900000011920929,
-						ZIndex = 1002,
-						BorderSizePixel = 0,
-					}, Slider)
-
-					New("TextLabel", {
-						Name = "TextToggle",
-						Position = UDim2.new(0.04800000086426735, 0, 0.30000001192092896, 0),
-						Size = UDim2.new(0.6600000262260437, 0, 0.6000000238418579, 0),
-						BackgroundColor3 = Color3.fromRGB(28,32,48),
-						BackgroundTransparency = 1,
-						Text = text2,
-						TextColor3 = Color3.fromRGB(255, 255, 255),
-						TextScaled = true,
-						Font = Enum.Font.SourceSansSemibold,
-						TextTransparency = 0.10000000149011612,
-						TextXAlignment = Enum.TextXAlignment.Left,
-						ZIndex = 101,
-					}, Slider)
-
-					local Effect = New("Frame", {
-						Name = "Effect",
-						Position = UDim2.new(0.4980000042915344, 0, 0.25, 0),
-						Size = UDim2.new(0.5, 0, 0.6990000009536743, 0),
-						BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-						BackgroundTransparency = 1,
-						ZIndex = 101,
-					}, Slider)
-
-					local SliderValue = New("TextLabel", {
-						Name = "SliderValue",
-						Position = UDim2.new(0.6990000009536743, 0, 0.10000000149011612, 0),
-						Size = UDim2.new(0.25, 0, 0.8080000281333923, 0),
-						BackgroundColor3 = Color3.fromRGB(33,37,53),
-						Text = tostring(value) .. suffix,
-						TextColor3 = Color3.fromRGB(255, 255, 255),
-						TextScaled = true,
-						Font = Enum.Font.SourceSansSemibold,
-						TextTransparency = 0.20000000298023224,
-						ZIndex = 102,
-					}, Effect)
-					New("UICorner", { CornerRadius = UDim.new(0, 5) }, SliderValue)
-
-					local Line = New("Frame", {
-						Name = "Line",
-						Position = UDim2.new(0.03999999910593033, 0, 0.3190000057220459, 0),
-						Size = UDim2.new(0.6000000238418579, 0, 0.24, 0),
-						BackgroundColor3 = Color3.fromRGB(33,37,53),
-						ZIndex = 101,
-					}, Effect)
-					New("UICorner", { CornerRadius = UDim.new(1, 0) }, Line)
-
-					local InLine = New("Frame", {
-						Name = "InLine",
-						Size = UDim2.new(0, 0, 1, 0),
-						BackgroundColor3 = mainColor,
-						ZIndex = 102,
-					}, Line)
-					New("UICorner", { CornerRadius = UDim.new(1, 0) }, InLine)
-
-					local Trigger = New("TextButton", {
-						Name = "Trigger",
-						Position = UDim2.new(0.10000000149011612, 0, -1.8000000715255737, 0),
-						Size = UDim2.new(1.1999999284744263, 0, 4.200000286102295, 0),
-						AnchorPoint = Vector2.new(0.800000011920929, 0),
-						BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-                  BackgroundTransparency = 1,
-						Text = "",
-						ZIndex = 103,
-					}, Line)
-					New("UICorner", { CornerRadius = UDim.new(1, 0) }, Trigger)
-					New("UIAspectRatioConstraint", {}, Trigger)
-
-					task.defer(function()
-						InLine.Size = UDim2.fromScale(initRatio, 1)
-						Trigger.Position = UDim2.new(initRatio, 0, -1.8000000715255737, 0)
-					end)
-
-					local function update(input)
-						local sizeScale = math.clamp((input.Position.X - Line.AbsolutePosition.X) / Line.AbsoluteSize.X, 0, 1)
-						value = math.floor(((max - min) * sizeScale) + min)
-						Tween(InLine, { Size = UDim2.fromScale(sizeScale, 1) }, 0.1)
-						Trigger.Position = UDim2.new(sizeScale, 0, -1.8000000715255737, 0)
-						SliderValue.Text = tostring(value) .. suffix
-						if callback then callback(value) end
-					end
-
-					Line.InputBegan:Connect(function(input)
-						if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-							dragging = true; update(input)
-						end
-					end)
-					UserInputService.InputEnded:Connect(function(input)
-						if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-							dragging = false
-						end
-					end)
-					UserInputService.InputChanged:Connect(function(input)
-						if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-							update(input)
-						end
-					end)
-
-					local obj = {}
-					function obj:Set(val)
-						value = math.clamp(val, min, max)
-						local ratio = (value - min) / (max - min)
-						InLine.Size = UDim2.fromScale(ratio, 1)
-						Trigger.Position = UDim2.new(ratio, 0, -1.8000000715255737, 0)
-						SliderValue.Text = tostring(value) .. suffix
-						if callback then callback(value) end
-					end
-					function obj:Get() return value end
-					table.insert(_registeredElements, { key = "accordion_slider_" .. text2, obj = obj })
-					return obj
+					return CreateSliderRow(Container, accordionElemCount, text2, min, max, default, callback, suffix, decimals, 100, 7.5, "accordion_slider_" .. text2)
 				end
 
 				function AccordionObj:AddColorpicker(text2, defaultColor, callback)
@@ -4211,7 +4719,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 						Name = "colorpickerFrame",
 						Position = UDim2.new(1.1, 0, 0, 0),
 						Size = UDim2.new(1, 0, 7, 0),
-						BackgroundColor3 = Color3.fromRGB(15,17,26),
+						BackgroundColor3 = Color3.fromRGB(16, 16, 16),
 						BorderSizePixel = 0,
 						Visible = false,
 						ZIndex = 350,
@@ -4266,7 +4774,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 					New("UICorner", { CornerRadius = UDim.new(1, 0) }, DarknessCircle)
 
 					local colorHex = New("TextLabel", {
-						BackgroundColor3 = Color3.fromRGB(15,17,26),
+						BackgroundColor3 = Color3.fromRGB(16, 16, 16),
 						Position = UDim2.new(0.0717131495, 0, 0.855, 0),
 						Size = UDim2.new(0.44, 0, 0.09, 0),
 						Font = Enum.Font.ArialBold,
@@ -4278,7 +4786,7 @@ UIAspectRatioConstraint.Parent = Colorpicker
 					New("UICorner", { CornerRadius = UDim.new(0, 4) }, colorHex)
 
 					local Copy = New("TextButton", {
-						BackgroundColor3 = Color3.fromRGB(15,17,26),
+						BackgroundColor3 = Color3.fromRGB(16, 16, 16),
 						Position = UDim2.new(0.54, 0, 0.855, 0),
 						Size = UDim2.new(0.39, 0, 0.09, 0),
 						AutoButtonColor = false,
