@@ -582,7 +582,7 @@ Aspect.AspectRatio = 1.4
 	local Info = Instance.new('Frame')
 	Info.Name = "Info"
 	Info.Position = UDim2.new(0.008999999612569809,0,0.9070000052452087,0)
-	Info.Size = UDim2.new(0.20000000298023224,0,0.07900000363588333,0)
+	Info.Size = UDim2.new(0.30, 0, 0.14, 0)
 	Info.BackgroundColor3 = Color3.fromRGB(162,162,162)
 	Info.BackgroundTransparency = 1
 	Info.BorderSizePixel = 0
@@ -591,8 +591,8 @@ Aspect.AspectRatio = 1.4
 	-- Game card (rounded rectangle): game icon + game name + players count
 	local GameCard = Instance.new('Frame')
 	GameCard.Name = "GameCard"
-	GameCard.Position = UDim2.new(0, 0, 0, 0)
-	GameCard.Size = UDim2.new(0.42, 0, 1, 0)
+	GameCard.Position = UDim2.new(0, 3, 0, 0)
+	GameCard.Size = UDim2.new(0.80, 0, 1, 0)
 	GameCard.BackgroundColor3 = Color3.fromRGB(16,19,28)
 	GameCard.BackgroundTransparency = 0.3
 	GameCard.BorderSizePixel = 0
@@ -604,7 +604,7 @@ Aspect.AspectRatio = 1.4
 	GameIcon.Name = "GameIcon"
 	GameIcon.Position = UDim2.new(0, 4, 0.5, 0)
 	GameIcon.AnchorPoint = Vector2.new(0, 0.5)
-	GameIcon.Size = UDim2.new(0.36, 0, 0.74, 0)
+	GameIcon.Size = UDim2.new(0.30, 0, 0.78, 0)
 	GameIcon.BackgroundColor3 = Color3.fromRGB(21,24,36)
 	GameIcon.BorderSizePixel = 0
 	GameIcon.ScaleType = Enum.ScaleType.Crop
@@ -614,8 +614,8 @@ Aspect.AspectRatio = 1.4
 
 	local GameName = Instance.new('TextLabel')
 	GameName.Name = "GameName"
-	GameName.Position = UDim2.new(0.44, 0, 0.1, 0)
-	GameName.Size = UDim2.new(0.54, 0, 0.42, 0)
+	GameName.Position = UDim2.new(0.35, 0, 0.10, 0)
+	GameName.Size = UDim2.new(0.62, 0, 0.42, 0)
 	GameName.BackgroundTransparency = 1
 	GameName.Text = "Loading..."
 	GameName.TextColor3 = Color3.fromRGB(255,255,255)
@@ -627,8 +627,8 @@ Aspect.AspectRatio = 1.4
 
 	local PlayersRow = Instance.new('Frame')
 	PlayersRow.Name = "PlayersRow"
-	PlayersRow.Position = UDim2.new(0.44, 0, 0.56, 0)
-	PlayersRow.Size = UDim2.new(0.54, 0, 0.34, 0)
+	PlayersRow.Position = UDim2.new(0.35, 0, 0.56, 0)
+	PlayersRow.Size = UDim2.new(0.62, 0, 0.34, 0)
 	PlayersRow.BackgroundTransparency = 1
 	PlayersRow.Parent = GameCard
 
@@ -692,23 +692,16 @@ Aspect.AspectRatio = 1.4
 			end)
 		end
 
-		if not gicon then
-			local ibody = tryGet("https://thumbnails.roblox.com/v1/games/icons?universeIds=" .. tostring(game.GameId) .. "&returnPolicy=PlaceHolder&size=512x512&format=Png&isCircular=false")
-			if ibody then
-				pcall(function()
-					local data = Http:JSONDecode(ibody)
-					local entry = data and data.data and data.data[1]
-					if entry and entry.imageUrl then gicon = entry.imageUrl end
-				end)
-			end
-		end
-
 		if gname then GameName.Text = gname else GameName.Text = "Unknown Game" end
-		if gicon then
-			GameIcon.Image = gicon
-		else
-			GameIcon.Image = "https://www.roblox.com/asset-thumbnail/image?assetId=" .. tostring(game.PlaceId) .. "&width=420&height=420&format=Png&bust=" .. tostring(os.time())
-		end
+		-- rbxthumb URI (external https URLs do not render in ImageLabels)
+		GameIcon.Image = "rbxthumb://type=GameIcon&id=" .. tostring(game.PlaceId) .. "&w=256&h=256"
+		task.delay(4, function()
+			pcall(function()
+				if not GameIcon.IsLoaded then
+					GameIcon.Image = "rbxthumb://type=GameIcon&id=" .. tostring(game.GameId) .. "&w=256&h=256"
+				end
+			end)
+		end)
 
 		local function refreshPlaying()
 			if gplaying then
@@ -725,8 +718,8 @@ Aspect.AspectRatio = 1.4
 
 	local WindowSettings = Instance.new('TextButton')
 	WindowSettings.Name = "WindowSettings"
-	WindowSettings.Position = UDim2.new(0.450000059604645,0,0.3499999940395355,0)
-	WindowSettings.Size = UDim2.new(0.6000000238418579,0,0.5,0)
+	WindowSettings.Position = UDim2.new(0.86, 0, 0.25, 0)
+	WindowSettings.Size = UDim2.new(0.13, 0, 0.5, 0)
 	WindowSettings.BackgroundColor3 = Color3.fromRGB(255,255,255)
 	WindowSettings.BackgroundTransparency = 1
 	WindowSettings.Text = ""
@@ -1873,9 +1866,10 @@ UIAspectRatioConstraint.Parent = ImageLabel
 		Position = UDim2.new(0.915, 0, 0.13, 0),
 		Size = UDim2.new(0.062, 0, 0.66, 0),
 		BackgroundTransparency = 1,
-		Text = "•   •   •",
+		Text = "•     •     •",
 		TextColor3 = Color3.fromRGB(255,255,255),
-		TextScaled = true,
+		TextScaled = false,
+		TextSize = 16,
 		Font = Enum.Font.SourceSansSemibold,
 		ZIndex = 20,
 	}, Header)
@@ -2846,9 +2840,12 @@ Line9.Parent = MainFrame
 	Line4.Parent = MainFrame
 
 	
+	-- Window dragging: dedicated top-strip handle (proven pattern) + filtered
+	-- frame-level drag so backgrounds/sidebar drag, controls don't.
 	do
 		local dragging = false
 		local dragInput, startPos, startInputPos
+
 		local function overInteractive()
 			local mp = UserInputService:GetMouseLocation()
 			for _, obj in ipairs(MainFrame:GetDescendants()) do
@@ -2861,7 +2858,8 @@ Line9.Parent = MainFrame
 			end
 			return false
 		end
-		MainFrame.InputBegan:Connect(function(input)
+
+		local function onBegan(input)
 			if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then return end
 			if overInteractive() then return end
 			dragging = true
@@ -2870,11 +2868,18 @@ Line9.Parent = MainFrame
 			input.Changed:Connect(function()
 				if input.UserInputState == Enum.UserInputState.End then dragging = false end
 			end)
-		end)
-		MainFrame.InputChanged:Connect(function(input)
+		end
+		local function onChanged(input)
 			if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
 				dragInput = input
 			end
+		end
+
+		MainFrame.InputBegan:Connect(onBegan)
+		MainFrame.InputChanged:Connect(onChanged)
+		pcall(function()
+			Tab.InputBegan:Connect(onBegan)
+			Tab.InputChanged:Connect(onChanged)
 		end)
 		UserInputService.InputChanged:Connect(function(input)
 			if dragging and input == dragInput then
@@ -2884,7 +2889,38 @@ Line9.Parent = MainFrame
 		end)
 	end
 
-	
+	-- Dedicated drag strip along the very top (title row) - always draggable
+	do
+		local DragHandle = Instance.new("Frame")
+		DragHandle.Name = "DragHandle"
+		DragHandle.BackgroundTransparency = 1
+		DragHandle.Position = UDim2.new(0, 0, 0, 0)
+		DragHandle.Size = UDim2.new(1, 0, 0.083, 0)
+		DragHandle.ZIndex = 0
+		DragHandle.Parent = MainFrame
+
+		local dd, di, sp, sip = false, nil, nil, nil
+		DragHandle.InputBegan:Connect(function(input)
+			if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then return end
+			dd = true
+			sip = input.Position
+			sp = MainFrame.Position
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then dd = false end
+			end)
+		end)
+		DragHandle.InputChanged:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+				di = input
+			end
+		end)
+		UserInputService.InputChanged:Connect(function(input)
+			if dd and input == di then
+				local d = input.Position - sip
+				MainFrame.Position = UDim2.new(sp.X.Scale, sp.X.Offset + d.X, sp.Y.Scale, sp.Y.Offset + d.Y)
+			end
+		end)
+	end
 	local ToggleBtn = Instance.new("TextButton")
 	ToggleBtn.Name = "ToggleBtn"
 	ToggleBtn.Position = UDim2.new(0, 10, 0, 10)
