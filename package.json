@@ -1,0 +1,14 @@
+{
+  "name": "lph-discord-bot",
+  "version": "5.0.0",
+  "private": true,
+  "description": "Discord wrapper for the Luraph V15 deobfuscator",
+  "main": "bot.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.22.1"
+  }
+}
