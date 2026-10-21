@@ -119,41 +119,89 @@ function sourceExtension(sourceLabel, fallback = '.luau') {
 
 function helpEmbed(guild) {
   const e = E(guild);
+  const commandGroups = [
+    {
+      name: 'General',
+      commands: [
+        [`${PREFIX}help`, 'Show all commands and their purposes.'],
+        [`${PREFIX}deobf`, 'Open the interactive deobfuscator selector for an attached, replied-to, or linked source.'],
+        [`${PREFIX}detect`, 'Detect the likely obfuscator and whether an engine is available.'],
+        [`${PREFIX}game`, 'Detect Roblox game names and PlaceIds from source text.'],
+        [`${PREFIX}preview`, 'Preview source without modifying it.'],
+        [`${PREFIX}paste`, 'Upload source/code to Pastefy.'],
+      ],
+    },
+    {
+      name: 'Luraph and Lua engines',
+      commands: [
+        [`${PREFIX}lph`, 'Choose Luraph V15 Version 1, V15 Version 2, or V14.7.'],
+        [`${PREFIX}luraph`, 'Compatibility alias for Luraph V14.7.'],
+        [`${PREFIX}luaobf`, 'Choose Chaotic Good / Chaotic Evil; or use `.luaobf good` and `.luaobf evil`.'],
+        [`${PREFIX}mv`, 'MoonVeil 1.4.5.'],
+        [`${PREFIX}luast`, 'LUAST deobfuscator.'],
+        [`${PREFIX}hl`, 'hide.lat lite deobfuscator.'],
+        [`${PREFIX}flow`, 'FlowAuth deobfuscation/fetch pipeline.'],
+        [`${PREFIX}ib`, 'IronBrew2 deobfuscator.'],
+        [`${PREFIX}goofy`, 'Goofyfuscator V10.'],
+        [`${PREFIX}ms`, 'MoonSec V2.'],
+        [`${PREFIX}iv`, 'IronVeil V1.'],
+        [`${PREFIX}hercules`, 'Hercules deobfuscator.'],
+        [`${PREFIX}7f`, '77fuscator deobfuscator.'],
+        [`${PREFIX}promdeobf`, 'Prometheus deobfuscator.'],
+        [`${PREFIX}wrd`, 'WeAreDevs Prometheus-family deobfuscator.'],
+      ],
+    },
+    {
+      name: 'Utilities',
+      commands: [
+        [`${PREFIX}luarmor`, 'Fetch authorized Luarmor loaders using a configured or supplied script key.'],
+        [`${PREFIX}get`, 'Fetch direct/raw HTTP(S) source; HTML pages are rejected.'],
+        [`${PREFIX}decode`, 'Decode recognized text encodings without executing the result.'],
+        [`${PREFIX}beautify / ${PREFIX}beutify`, 'Format Lua/Luau only; does not deobfuscate or rename.'],
+        [`${PREFIX}rename`, 'Safely clean machine-looking identifiers while preserving strings, comments, and property names.'],
+      ],
+    },
+  ];
+
+  const fields = [];
+  for (const group of commandGroups) {
+    let chunk = [];
+    let length = 0;
+    for (const [command, description] of group.commands) {
+      const line = `**${command}** — ${description}`;
+      const extra = line.length + (chunk.length ? 1 : 0);
+      if (length + extra > 1000 && chunk.length) {
+        fields.push({ name: group.name, value: chunk.join('\n'), inline: false });
+        chunk = [];
+        length = 0;
+      }
+      chunk.push(line);
+      length += line.length + (chunk.length > 1 ? 1 : 0);
+    }
+    if (chunk.length) fields.push({ name: group.name, value: chunk.join('\n'), inline: false });
+  }
+
+  const aliases = ENGINES.map(x => `**${x.command}** — ${x.label}`);
+  let aliasChunk = [];
+  let aliasLength = 0;
+  for (const alias of aliases) {
+    const extra = alias.length + (aliasChunk.length ? 1 : 0);
+    if (aliasLength + extra > 1000 && aliasChunk.length) {
+      fields.push({ name: 'Deobfuscator aliases', value: aliasChunk.join('\n'), inline: false });
+      aliasChunk = [];
+      aliasLength = 0;
+    }
+    aliasChunk.push(alias);
+    aliasLength += alias.length + (aliasChunk.length > 1 ? 1 : 0);
+  }
+  if (aliasChunk.length) fields.push({ name: 'Deobfuscator aliases', value: aliasChunk.join('\n'), inline: false });
+
   return new EmbedBuilder()
     .setTitle(`${e.done} Lua Utility Bot — Commands`)
     .setDescription('Lua/Luau analysis, deobfuscation, formatting, detection and decoding. Supported input: `.lua`, `.luau`, `.txt`.')
-    .addFields(
-      { name: `${PREFIX}help`, value: 'Show all commands and their purposes.' },
-      { name: `${PREFIX}deobf`, value: 'Open buttons to choose a deobfuscator for the attached/replied source.' },
-      { name: `${PREFIX}detect`, value: 'Detect the likely obfuscator and show whether this bot has an engine for it.' },
-      { name: `${PREFIX}game`, value: 'Detect Roblox game names from source text, game-name fields, URLs, comments, and PlaceIds. It can resolve PlaceIds to a game name when Roblox public APIs return the metadata.' },
-      { name: `${PREFIX}lph`, value: 'Luraph family; opens V15 Version 1 / V15 Version 2 / V14.7 choices.' },
-      { name: `${PREFIX}luraph`, value: 'Compatibility alias for Luraph V14.7.' },
-      { name: `${PREFIX}luarmor`, value: 'Luarmor fetcher for authorized Luarmor loaders. Uses LUARMOR_SCRIPT_KEY or a supplied script key.' },
-      { name: `${PREFIX}luast`, value: 'LUAST deobfuscator.' },
-      { name: `${PREFIX}flow`, value: 'FlowAuth deobfuscator/fetch pipeline.' },
-      { name: `${PREFIX}hl`, value: 'hide.lat lite deobfuscator.' },
-      { name: `${PREFIX}mv`, value: 'MoonVeil 1.4.5 engine.' },
-      { name: `${PREFIX}luaobf`, value: 'LuaObfuscator; opens Chaotic Good / Chaotic Evil choices.' },
-      { name: `${PREFIX}ib`, value: 'IronBrew2 deobfuscator.' },
-      { name: `${PREFIX}goofy`, value: 'Goofyfuscator v10 engine.' },
-      { name: `${PREFIX}ms`, value: 'MoonSec V2 deobfuscator.' },
-      { name: `${PREFIX}iv`, value: 'IronVeil V1 deobfuscator.' },
-      { name: `${PREFIX}hercules`, value: 'Hercules deobfuscator.' },
-      { name: `${PREFIX}7f`, value: '77fuscator deobfuscator.' },
-      { name: `${PREFIX}promdeobf`, value: 'Prometheus deobfuscator.' },
-      { name: `${PREFIX}wrd`, value: 'WeAreDevs Prometheus-family deobfuscator.' },
-      { name: `${PREFIX}get`, value: 'Fetch direct/raw HTTP(S) content only. HTML pages are rejected; Luarmor loader URLs can use the Luarmor fallback when a script key is configured.' },
-      { name: `${PREFIX}paste`, value: 'Upload the source file/code to Pastefy and show the visible Pastefy URL.' },
-      { name: `${PREFIX}preview`, value: 'Preview the source file/code without modifying it.' },
-      { name: `${PREFIX}decode`, value: 'Layered decoder for recognized text encodings; never executes decoded code.' },
-      { name: `${PREFIX}beautify` + ` / ${PREFIX}beutify`, value: 'Formatting only: lexer-aware Lua/Luau beautification. It does not deobfuscate or rename.' },
-      { name: `${PREFIX}rename`, value: 'Maximum safe identifier cleanup for machine-looking locals/variables while preserving strings, comments and property names.' },
-    )
-    .addFields({ name: 'Deobfuscator aliases', value: ENGINES.map(x => `[1;37m${x.command}[0m — ${x.label}`).join('\n') })
-    .setFooter({ text: 'Full outputs are attached. Pastefy uses PASTEFY_API_TOKEN / PASTEFY_API_KEY.' });
+    .addFields(fields)
+    .setFooter({ text: 'Full outputs are attached. Pastefy requires PASTEFY_API_TOKEN / PASTEFY_API_KEY.' });
 }
-
 function extractUrls(text) {
   if (!text) return [];
   const matches = text.match(/https?:\/\/[^\s<>'"`]+/gi) || [];
