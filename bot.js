@@ -16,10 +16,12 @@ const os = require('os');
 const crypto = require('crypto');
 const dns = require('dns/promises');
 const net = require('net');
+const http = require('http');
 const { spawn } = require('child_process');
 
 const { ENGINES, detect, get } = require('./Engines/registry');
 const engineRunner = require('./Engines/engine_runner');
+const { detectGames } = require('./GameDetector');
 
 const TOKEN = process.env.DISCORD_TOKEN;
 if (!TOKEN) throw new Error('Missing DISCORD_TOKEN environment variable.');
@@ -36,6 +38,7 @@ const DEOB = path.resolve(__dirname, 'Deobfuscator/deob.js');
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
 const running = new Set();
 const pending = new Map();
+const resultCache = new Map();
 
 const SUPPORTED_EXT = /\.(lua|luau|txt)$/i;
 const LUA_KEYWORDS = new Set([
@@ -54,18 +57,18 @@ function buttonEmoji(guild, name) {
 function E(guild) {
   const names = {
     loading: 'loading', done: 'done', open: 'open', error: 'error', failed: 'failed', preview: 'preview', link: 'link',
-    luraph: 'luraph', moonveil: 'Moonveil', hercules: 'hercules', moonsec: 'MoonSec',
+    luraph: 'luraph', luarmor: 'luarmor', moonveil: 'Moonveil', hercules: 'hercules', luaobf: 'luaobf', moonsec: 'MoonSec',
     ironbrew2: 'ironbrew2', prometheus: 'prometheus', wrd: 'wrd', pastefy: 'pastefy',
     goofy: 'Goofyscator', ironveil: 'ironveil', sevenf: '77fuscator',
   };
-  const fallback = { loading: '⏳', done: '✓', open: '↗', error: '⚠', failed: '×', preview: '◉', link: '🔗', luraph: 'L', moonveil: 'M', hercules: 'H', moonsec: 'MS', ironbrew2: 'IB', prometheus: 'P', wrd: 'WRD', pastefy: 'P', goofy: 'G', ironveil: 'IV', sevenf: '77F' };
+  const fallback = { loading: '⏳', done: '✓', open: '↗', error: '⚠', failed: '×', preview: '◉', link: '🔗', luarmor: 'LF', luraph: 'L', moonveil: 'M', hercules: 'H', moonsec: 'MS', ironbrew2: 'IB', prometheus: 'P', wrd: 'WRD', pastefy: 'P', luaobf: 'LO', goofy: 'G', ironveil: 'IV', sevenf: '77F' };
   return Object.fromEntries(Object.entries(names).map(([key, name]) => [key, serverEmoji(guild, name, fallback[key])]));
 }
 
 function engineEmojiKey(engineId) {
   return ({
-    luraph15: 'luraph', luraph14: 'luraph', moonveil: 'moonveil', 'luaobf-good': 'hercules', 'luaobf-evil': 'prometheus',
-    ironbrew2: 'ironbrew2', goofy: 'goofy', moonsec2: 'moonsec', ironveil1: 'ironveil', hercules: 'hercules', '77f': 'sevenf', prometheus: 'prometheus', wearedevs: 'wrd'
+    luraph15: 'luraph', luraph15v2: 'luraph', luraph14: 'luraph', luarmor: 'luarmor', moonveil: 'moonveil', 'luaobf-good': null, 'luaobf-evil': null,
+    ironbrew2: 'ironbrew2', goofy: 'goofy', moonsec2: 'moonsec', ironveil1: 'ironveil', hercules: 'hercules', '77f': 'sevenf', prometheus: 'prometheus', wearedevs: 'wrd', luast: null, flowauth: null, hidelat: null
   })[engineId] || null;
 }
 
@@ -123,8 +126,13 @@ function helpEmbed(guild) {
       { name: `${PREFIX}help`, value: 'Show all commands and their purposes.' },
       { name: `${PREFIX}deobf`, value: 'Open buttons to choose a deobfuscator for the attached/replied source.' },
       { name: `${PREFIX}detect`, value: 'Detect the likely obfuscator and show whether this bot has an engine for it.' },
-      { name: `${PREFIX}lph`, value: 'Luraph family; opens V15 / V14.7 version choices.' },
+      { name: `${PREFIX}game`, value: 'Detect Roblox game names from source text, game-name fields, URLs, comments, and PlaceIds. It can resolve PlaceIds to a game name when Roblox public APIs return the metadata.' },
+      { name: `${PREFIX}lph`, value: 'Luraph family; opens V15 Version 1 / V15 Version 2 / V14.7 choices.' },
       { name: `${PREFIX}luraph`, value: 'Compatibility alias for Luraph V14.7.' },
+      { name: `${PREFIX}luarmor`, value: 'Luarmor fetcher for authorized Luarmor loaders. Uses LUARMOR_SCRIPT_KEY or a supplied script key.' },
+      { name: `${PREFIX}luast`, value: 'LUAST deobfuscator.' },
+      { name: `${PREFIX}flow`, value: 'FlowAuth deobfuscator/fetch pipeline.' },
+      { name: `${PREFIX}hl`, value: 'hide.lat lite deobfuscator.' },
       { name: `${PREFIX}mv`, value: 'MoonVeil 1.4.5 engine.' },
       { name: `${PREFIX}luaobf`, value: 'LuaObfuscator; opens Chaotic Good / Chaotic Evil choices.' },
       { name: `${PREFIX}ib`, value: 'IronBrew2 deobfuscator.' },
@@ -135,7 +143,9 @@ function helpEmbed(guild) {
       { name: `${PREFIX}7f`, value: '77fuscator deobfuscator.' },
       { name: `${PREFIX}promdeobf`, value: 'Prometheus deobfuscator.' },
       { name: `${PREFIX}wrd`, value: 'WeAreDevs Prometheus-family deobfuscator.' },
-      { name: `${PREFIX}get`, value: 'Fetch direct/raw HTTP(S) content only. It rejects HTML pages instead of scraping them.' },
+      { name: `${PREFIX}get`, value: 'Fetch direct/raw HTTP(S) content only. HTML pages are rejected; Luarmor loader URLs can use the Luarmor fallback when a script key is configured.' },
+      { name: `${PREFIX}paste`, value: 'Upload the source file/code to Pastefy and show the visible Pastefy URL.' },
+      { name: `${PREFIX}preview`, value: 'Preview the source file/code without modifying it.' },
       { name: `${PREFIX}decode`, value: 'Layered decoder for recognized text encodings; never executes decoded code.' },
       { name: `${PREFIX}beautify` + ` / ${PREFIX}beutify`, value: 'Formatting only: lexer-aware Lua/Luau beautification. It does not deobfuscate or rename.' },
       { name: `${PREFIX}rename`, value: 'Maximum safe identifier cleanup for machine-looking locals/variables while preserving strings, comments and property names.' },
@@ -233,6 +243,12 @@ function makePreview(code) {
   return clean.length <= MAX_PREVIEW ? { text: clean, truncated: false } : { text: clean.slice(0, MAX_PREVIEW) + '\n-- ... preview truncated; full result is attached ...', truncated: true };
 }
 function safeCodeBlock(code) { return String(code).replace(/```/g, '` ` `'); }
+function resultButtons(guild, cacheId, pasteUrl = null) {
+  const row = new ActionRowBuilder();
+  row.addComponents(makeButton(guild, `copyresult:${cacheId}`, 'Copy Output', ButtonStyle.Secondary, 'preview'));
+  if (pasteUrl) row.addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Pastefy').setURL(pasteUrl));
+  return row;
+}
 function attachmentFrom(message) { return [...message.attachments.values()].find(a => SUPPORTED_EXT.test(a.name || '')); }
 async function repliedMessage(message) { return message.reference?.messageId ? message.fetchReference().catch(() => null) : null; }
 function sourceMessages(message, replied) { return [message, replied].filter(Boolean); }
@@ -267,27 +283,44 @@ async function withJob(fn) {
   try { return await fn(); } finally { running.delete(id); }
 }
 
-async function uploadPastefy(title, content, type = 'LUA') {
+async function uploadPastefy(title, content, type = 'PASTE') {
   if (!PASTEFY_TOKEN) return { url: null, configured: false, error: 'PASTEFY_API_TOKEN / PASTEFY_API_KEY is not configured.' };
-  const auth = /^(?:Bearer|Token)\s+/i.test(PASTEFY_TOKEN) ? PASTEFY_TOKEN : `${PASTEFY_AUTH_SCHEME} ${PASTEFY_TOKEN}`;
-  const payload = { title, content, visibility: 'UNLISTED', type, encrypted: false, tags: ['skulx-cli'] };
-  const res = await fetch(PASTEFY_API_URL, {
-    method: 'POST',
-    headers: { Authorization: auth, 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  const body = await res.text();
-  let data = null; try { data = body ? JSON.parse(body) : null; } catch {}
-  if (!res.ok) {
-    const detail = String(data?.message || data?.error || data?.errors?.[0]?.message || body || `HTTP ${res.status}`).slice(0, 1000);
-    return { url: null, configured: true, error: `Pastefy HTTP ${res.status}: ${detail}` };
+  const auth = /^(?:Bearer|Token)\s+/i.test(PASTEFY_TOKEN) ? PASTEFY_TOKEN : `Bearer ${PASTEFY_TOKEN}`;
+  // Keep the request deliberately minimal. Pastefy's API accepts title/content and
+  // optional paste metadata; sending an unsupported type/tags combination can result
+  // in a server-side 500 on some Pastefy deployments.
+  const payload = {
+    title: String(title).slice(0, 255),
+    content: String(content),
+    encrypted: false,
+    visibility: 'UNLISTED',
+    type: 'PASTE',
+  };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
+  try {
+    const res = await fetch(PASTEFY_API_URL, {
+      method: 'POST',
+      headers: { Authorization: auth, 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    const body = await res.text();
+    let data = null; try { data = body ? JSON.parse(body) : null; } catch {}
+    if (!res.ok) {
+      const detail = String(data?.message || data?.error || data?.exception || data?.errors?.[0]?.message || body || `HTTP ${res.status}`).slice(0, 1200);
+      return { url: null, configured: true, error: `Pastefy HTTP ${res.status}: ${detail}` };
+    }
+    const paste = data?.paste || data?.data?.paste || data?.data || data;
+    const url = paste?.raw_url || paste?.rawUrl || (paste?.id ? `https://pastefy.app/${paste.id}/raw` : null);
+    if (!url) return { url: null, configured: true, error: 'Pastefy returned success but no paste URL/ID.' };
+    return { url, configured: true, error: null };
+  } catch (err) {
+    return { url: null, configured: true, error: err?.name === 'AbortError' ? 'Pastefy request timed out.' : `Pastefy request failed: ${err?.message || err}` };
+  } finally {
+    clearTimeout(timer);
   }
-  const paste = data?.paste || data?.data?.paste || data?.data || data;
-  const url = paste?.raw_url || paste?.rawUrl || (paste?.id ? `https://pastefy.app/${paste.id}` : null);
-  if (!url) return { url: null, configured: true, error: 'Pastefy returned success but no paste URL/ID.' };
-  return { url, configured: true, error: null };
 }
-
 
 function stripLuaCommentsPreservingStrings(code) {
   const out = [];
@@ -344,70 +377,246 @@ function tokenizeLua(code) {
   return tokens;
 }
 
-function beautifyLua(code) {
-  const tokens = tokenizeLua(code);
+function beautifyLua(code, maxLine = 120) {
+  // Word-wrap only. We NEVER insert a character that was not already present.
+  // A line break can only replace an existing whitespace run outside strings/comments.
+  // Therefore the token stream remains byte-for-byte identical apart from whitespace.
+  const src = String(code).replace(/\r\n?/g, '\n');
   const out = [];
-  let line = '', indent = 0;
-  const pushLine = () => { const x = line.trim(); if (x) out.push('  '.repeat(Math.max(0, indent)) + x); line = ''; };
-  const append = s => { line += s; };
-  const prev = () => line.trim().slice(-1);
-  for (let i = 0; i < tokens.length; i++) {
-    const t = tokens[i], v = t.value, next = tokens[i + 1]?.value;
-    if (t.type === 'comment') { if (line.trim()) append(' '); append(v); pushLine(); continue; }
-    if (t.type === 'string' || t.type === 'number' || t.type === 'id') {
-      if (line && !/[.(\[=:]/.test(prev()) && !/^[,;)]/.test(v)) append(' ');
-      append(v);
-      if (t.type === 'id' && ['then','do','else','elseif','end','until'].includes(v) && (v === 'else' || v === 'elseif')) pushLine();
+  let line = '';
+  let i = 0;
+  let quote = null;
+  let longClose = null;
+  let comment = false;
+
+  const flush = () => { out.push(line); line = ''; };
+  while (i < src.length) {
+    const c = src[i];
+    if (c === '\n') { flush(); i++; comment = false; continue; }
+
+    if (comment) { line += c; i++; continue; }
+    if (longClose) {
+      if (src.startsWith(longClose, i)) { line += longClose; i += longClose.length; longClose = null; }
+      else { line += c; i++; }
       continue;
     }
-    if (v === ',') { append(','); if (next && next !== ')') append(' '); continue; }
-    if (v === ';') { append(';'); pushLine(); continue; }
-    if (v === '(' || v === '[') { append(v); continue; }
-    if (v === ')' || v === ']') { append(v); continue; }
-    if (v === '.') { append('.'); continue; }
-    if (v === ':') { append(':'); continue; }
-    if (v === '=') { append(' = '); continue; }
-    if (/^(==|~=|<=|>=|<|>|\+|-|\*|\/|%|\^|\.\.|and|or)$/.test(v)) { append(` ${v} `); continue; }
-    if (v === 'function') { if (line.trim()) pushLine(); append('function'); continue; }
-    if (v === 'then' || v === 'do') { append(` ${v}`); pushLine(); indent++; continue; }
-    if (v === 'else' || v === 'elseif') { pushLine(); indent = Math.max(0, indent - 1); append(v); if (v === 'elseif') append(' '); else pushLine(); if (v === 'elseif') {} continue; }
-    if (v === 'end' || v === 'until') { pushLine(); indent = Math.max(0, indent - 1); append(v); pushLine(); continue; }
-    if (v === 'repeat') { if (line.trim()) pushLine(); append(v); pushLine(); indent++; continue; }
-    if (v === 'return' || v === 'break' || v === 'continue') { if (line.trim()) append(' '); append(v); if (!next || next === 'end') pushLine(); continue; }
-    append(v);
+    if (quote) {
+      line += c;
+      if (c === '\\' && i + 1 < src.length) { line += src[i + 1]; i += 2; continue; }
+      if (c === quote) quote = null;
+      i++; continue;
+    }
+    if (c === '-' && src[i + 1] === '-') {
+      const lm = src.slice(i).match(/^--(\[=*)\[/);
+      if (lm) { const opener = lm[0]; longClose = ']' + lm[1].slice(1) + ']'; line += opener; i += opener.length; continue; }
+      line += '--'; i += 2; comment = true; continue;
+    }
+    if (c === '"' || c === "'") { quote = c; line += c; i++; continue; }
+    if (c === '[') {
+      const lm = src.slice(i).match(/^\[(=*)\[/);
+      if (lm) { const opener = lm[0]; longClose = ']' + lm[1] + ']'; line += opener; i += opener.length; continue; }
+    }
+    if (c === ' ' || c === '\t') {
+      let j = i + 1;
+      while (j < src.length && (src[j] === ' ' || src[j] === '\t')) j++;
+      const ws = src.slice(i, j);
+      // Only replace existing whitespace with a newline when the next token fits
+      // on a fresh line. This avoids splitting identifiers, literals or operators.
+      if (line.length >= maxLine && line.trim().length && j < src.length && src[j] !== '\n') flush();
+      else line += ws;
+      i = j; continue;
+    }
+    line += c; i++;
   }
-  pushLine();
-  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
+  if (line.length || src.endsWith('\n')) flush();
+  return out.join('\n');
 }
 
 function renameLua(code) {
-  const tokens = tokenizeLua(code);
-  const counts = new Map();
+  const src = String(code);
+  const tokens = tokenizeLua(src);
+  const suspicious = new Set();
+  const safeNames = new Set(['game','workspace','script','shared','_G','_ENV','task','coroutine','math','string','table','os','io','debug','utf8','bit32','Enum','Instance','UDim2','UDim','Vector2','Vector3','CFrame','Color3','BrickColor','RaycastParams','TweenInfo','Random','pcall','xpcall','require','error','warn','print','assert','pairs','ipairs','next','select','tonumber','tostring','type','typeof','setmetatable','getmetatable','rawget','rawset','rawequal','unpack','table','string','math']);
+
+  const machine = v =>
+    !safeNames.has(v) && (
+      /^[A-Za-z]$/.test(v) ||
+      /^_+\d+$/.test(v) ||
+      /^(?:v|var|value|data|context|result|function|table|string|number|argument|callback|index|key|item|state|config|buffer|source|target|output|local|str|num|obj|tbl|tmp|ret|arg|fn|func|res|val|env|obj|ref|tmp|unk|unknown)_?\d{1,5}$/i.test(v) ||
+      /^[A-Za-z]{1,3}\d{2,8}$/.test(v)
+    );
+
+  for (const t of tokens) if (t.type === 'id' && !LUA_KEYWORDS.has(t.value) && machine(t.value)) suspicious.add(t.value);
+
+  const stats = new Map();
+  const stat = (name, key, n = 1) => { const s = stats.get(name) || {}; s[key] = (s[key] || 0) + n; stats.set(name, s); };
+  const valuesAround = i => tokens.slice(Math.max(0, i - 8), Math.min(tokens.length, i + 14)).map(t => t.value).join(' ');
+
   for (let i = 0; i < tokens.length; i++) {
-    if (tokens[i].type !== 'id' || LUA_KEYWORDS.has(tokens[i].value)) continue;
-    const v = tokens[i].value;
-    if (/^(?:v|var|value|l|local|r|f|fn|func|t|tbl|s|str|string|n|num|number|a|b|c|d|x|y|z)_?\d{1,4}$/i.test(v) || /^_+\d+$/.test(v) || /^[A-Za-z]{1,2}\d{2,5}$/.test(v)) counts.set(v, (counts.get(v) || 0) + 1);
+    const t = tokens[i]; if (t.type !== 'id' || !suspicious.has(t.value)) continue;
+    const n = t.value, prev = tokens[i-1]?.value, next = tokens[i+1]?.value, after = tokens.slice(i+1, i+15).map(t=>t.value).join(' ');
+    if (prev === '.' || prev === ':') stat(n, 'property');
+    if (prev === 'local') stat(n, 'declaration');
+    if (next === '(') stat(n, 'call');
+    if (next === '[') stat(n, 'index');
+    if (next === '=') stat(n, 'assign');
+    if (prev === 'function') stat(n, 'function');
+    if (/GetService\s*\(/.test(after)) stat(n, 'service');
+    if (/WaitForChild\s*\(|FindFirstChild\s*\(/.test(after)) stat(n, 'child');
+    if (/Connect\s*\(/.test(after)) stat(n, 'connection');
+    if (/Instance\s*\.\s*new\s*\(/.test(after)) stat(n, 'instance');
+    if (/UDim2\s*\[|UDim2\s*\(/.test(after)) stat(n, 'uiSize');
+    if (/Color3\s*\[|Color3\s*\(/.test(after)) stat(n, 'color');
+    if (/Vector[23]\s*\[|Vector[23]\s*\(/.test(after)) stat(n, 'vector');
+    if (/CFrame\s*\[|CFrame\s*\(/.test(after)) stat(n, 'cframe');
+    if (/Enum\s*\[/.test(after)) stat(n, 'enum');
+    if (/string\s*\[|string\s*\./.test(after)) stat(n, 'stringApi');
+    if (/table\s*\[|table\s*\./.test(after)) stat(n, 'tableApi');
+    if (/math\s*\[|math\s*\./.test(after)) stat(n, 'mathApi');
+    if (/^=\s*\{/.test(after)) stat(n, 'tableValue');
+    if (/^=\s*function\b/.test(after) || next === 'function') stat(n, 'functionValue');
+    if (/^=\s*(?:true|false)\b/.test(after)) stat(n, 'boolean');
+    if (/^=\s*(?:"|')/.test(after)) stat(n, 'stringValue');
+    if (/^=\s*(?:0x|\d)/.test(after)) stat(n, 'numberValue');
   }
-  const candidates = [...counts.entries()].filter(([, c]) => c >= 1).map(([name]) => name);
-  const map = new Map();
-  let n = 1;
-  const names = ['value','data','context','result','function','table','string','number','argument','callback','index','key','item','state','config','buffer','source','target','output'];
-  for (const old of candidates) {
-    const base = names[(n - 1) % names.length];
-    const next = `${base}_${Math.floor((n - 1) / names.length) + 1}`;
-    map.set(old, next); n++;
+
+  // Extract useful API names from dynamic access such as string["gmatch"] and
+  // use them as semantic hints for the identifier immediately receiving the value.
+  const hints = new Map();
+  const addHint = (name, hint, weight=3) => {
+    const arr = hints.get(name) || []; arr.push([hint, weight]); hints.set(name, arr);
+  };
+  for (let i=0;i<tokens.length-4;i++) {
+    if (tokens[i].type !== 'id' || !suspicious.has(tokens[i].value)) continue;
+    const n=tokens[i].value;
+    const slice=tokens.slice(i, i+12).map(t=>t.value);
+    const joined=slice.join(' ');
+    if (/GetService/.test(joined)) addHint(n,'service');
+    if (/WaitForChild|FindFirstChild/.test(joined)) addHint(n,'child');
+    if (/Connect/.test(joined)) addHint(n,'connection');
+    const api=joined.match(/(?:string|table|math|task)\s*(?:\.|\[\s*['"])([A-Za-z_][A-Za-z0-9_]*)/);
+    if (api) addHint(n, api[1].replace(/^(gmatch|match|gsub|sub)$/,'patternMatcher').replace(/^concat$/,'join').replace(/^random$/,'randomNumber').replace(/^floor$/,'floor').replace(/^remove$/,'removeItem').replace(/^insert$/,'insertItem'));
+    if (/Instance\s*\.\s*new/.test(joined)) addHint(n,'instance');
+    if (/UDim2/.test(joined)) addHint(n,'uiSize');
+    if (/Color3/.test(joined)) addHint(n,'color');
+    if (/Vector[23]/.test(joined)) addHint(n,'vector');
+    if (/CFrame/.test(joined)) addHint(n,'cframe');
+    if (/Enum/.test(joined)) addHint(n,'enum');
   }
-  let out = '';
+
+  // Assignment-level inference is deliberately stronger than broad nearby-token
+  // inference. This keeps unrelated identifiers from all becoming "service" or
+  // "number" just because the same line contains an API call.
+  const assignmentHints = new Map();
+  const addAssignmentHint = (name, hint, weight = 10) => {
+    const arr = assignmentHints.get(name) || []; arr.push([hint, weight]); assignmentHints.set(name, arr);
+  };
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
-    if (t.type === 'id' && map.has(t.value) && tokens[i - 1]?.value !== '.' && tokens[i - 1]?.value !== ':') t.value = map.get(t.value);
-    if (t.type === 'comment' || t.type === 'string') out += t.value;
-    else { const pv = tokens[i - 1]?.value || ''; const need = out && /[A-Za-z0-9_]$/.test(out) && /^[A-Za-z0-9_]/.test(t.value) && pv !== '.' && pv !== ':'; if (need) out += ' '; out += t.value; }
-    if (t.type === 'comment') out += '\n';
+    if (t.type !== 'id' || !suspicious.has(t.value)) continue;
+    if (tokens[i + 1]?.value !== '=') continue;
+    const rhs = tokens.slice(i + 2, Math.min(tokens.length, i + 18));
+    const vals = rhs.map(x => x.value);
+    const text = vals.join(' ');
+    const first = vals[0] || '';
+    if (vals.includes('GetService')) addAssignmentHint(t.value, 'service', 30);
+    if (vals.includes('WaitForChild') || vals.includes('FindFirstChild')) addAssignmentHint(t.value, 'child', 28);
+    if (vals.includes('Connect')) addAssignmentHint(t.value, 'connection', 28);
+    if (vals.includes('Instance') && vals.includes('new')) addAssignmentHint(t.value, 'instance', 25);
+    if (vals.includes('UDim2')) addAssignmentHint(t.value, 'uiSize', 24);
+    if (vals.includes('Color3')) addAssignmentHint(t.value, 'color', 24);
+    if (vals.includes('Vector2') || vals.includes('Vector3')) addAssignmentHint(t.value, 'vector', 24);
+    if (vals.includes('CFrame')) addAssignmentHint(t.value, 'cframe', 24);
+    if (vals.includes('Enum')) addAssignmentHint(t.value, 'enum', 24);
+    if (first === 'function') addAssignmentHint(t.value, 'handler', 24);
+    if (first === '{') addAssignmentHint(t.value, 'table', 18);
+    if (first === 'true' || first === 'false') addAssignmentHint(t.value, 'flag', 18);
+    if (/^(?:string|table|math|task)$/.test(first) && vals[1] === '[') {
+      const literal = vals.find((v,j) => j > 1 && /^['"].*['"]$/.test(v));
+      if (literal) {
+        const api = literal.slice(1,-1);
+        const apiNames = {
+          gmatch:'patternMatcher', match:'patternMatcher', gsub:'replaceText', sub:'substring',
+          concat:'joinText', random:'randomNumber', floor:'floorValue', ceil:'ceilValue',
+          remove:'removeItem', insert:'insertItem', len:'length', byte:'byteValue', char:'charValue',
+          tonumber:'toNumber', tostring:'toString'
+        };
+        addAssignmentHint(t.value, apiNames[api] || api, 22);
+      }
+    }
+    if (first === 'tostring') addAssignmentHint(t.value, 'text', 20);
+    if (first === 'tonumber') addAssignmentHint(t.value, 'number', 20);
+    if (first === 'pcall' || first === 'xpcall') addAssignmentHint(t.value, 'protectedCall', 25);
+  }
+
+  // Short functions repeatedly invoked as d(...), f(...), k(...), etc. are often
+  // decoder/lookup helpers in generated obfuscator output. Prefer decoder only when
+  // the source also shows string/byte/tonumber operations nearby.
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t.type !== 'id' || !suspicious.has(t.value) || tokens[i + 1]?.value !== '(') continue;
+    const near = tokens.slice(Math.max(0, i - 20), Math.min(tokens.length, i + 25)).map(x => x.value).join(' ');
+    if (/tonumber|tostring|string|byte|char|gsub|gmatch|sub/.test(near)) addAssignmentHint(t.value, 'decoder', 18);
+  }
+
+  const bases = {
+    service:'service', child:'child', connection:'connection', instance:'instance', uiSize:'uiSize', color:'color', vector:'vector', cframe:'cframe', enum:'enum',
+    patternMatcher:'patternMatcher', replaceText:'replaceText', substring:'substring', joinText:'joinedText', randomNumber:'randomNumber', floorValue:'floorValue', ceilValue:'ceilValue', removeItem:'removedItem', insertItem:'insertedItem', length:'length', byteValue:'byteValue', charValue:'charValue', toNumber:'numberValue', toString:'text', protectedCall:'protectedCall', join:'joinedText',
+    stringApi:'stringValue', tableApi:'tableValue', mathApi:'mathValue', tableValue:'table', functionValue:'handler', function:'handler', boolean:'flag', stringValue:'text', numberValue:'number',
+    decoder:'decoder', environment:'environment', index:'index', callback:'callback', result:'result', state:'state', buffer:'buffer', source:'source', target:'target', output:'output', value:'value'
+  };
+  const used = new Set([...safeNames, ...LUA_KEYWORDS]);
+  const counts = Object.create(null);
+  const makeName = base => {
+    base = String(base || 'value').replace(/[^A-Za-z0-9_]/g,'_');
+    if (!/^[A-Za-z_]/.test(base)) base = '_' + base;
+    counts[base] = (counts[base] || 0) + 1;
+    let candidate = counts[base] === 1 ? base : `${base}_${counts[base]}`;
+    while (used.has(candidate)) { counts[base]++; candidate=`${base}_${counts[base]}`; }
+    used.add(candidate); return candidate;
+  };
+
+  const map = new Map();
+  const scoredBase = name => {
+    const arr = [...(hints.get(name) || []), ...(assignmentHints.get(name) || [])];
+    const score = new Map(); for (const [h,w] of arr) score.set(h,(score.get(h)||0)+w);
+    const s=stats.get(name)||{};
+    if (s.service) score.set('service',(score.get('service')||0)+8);
+    if (s.child) score.set('child',(score.get('child')||0)+7);
+    if (s.connection) score.set('connection',(score.get('connection')||0)+7);
+    if (s.instance) score.set('instance',(score.get('instance')||0)+6);
+    if (s.uiSize) score.set('uiSize',(score.get('uiSize')||0)+6);
+    if (s.color) score.set('color',(score.get('color')||0)+6);
+    if (s.vector) score.set('vector',(score.get('vector')||0)+6);
+    if (s.cframe) score.set('cframe',(score.get('cframe')||0)+6);
+    if (s.enum) score.set('enum',(score.get('enum')||0)+6);
+    if (s.functionValue || s.function) score.set('handler',(score.get('handler')||0)+5);
+    if (s.tableValue || s.tableApi) score.set('table',(score.get('table')||0)+4);
+    if (s.boolean) score.set('flag',(score.get('flag')||0)+4);
+    if (s.stringValue) score.set('text',(score.get('text')||0)+4);
+    if (s.numberValue) score.set('number',(score.get('number')||0)+3);
+    if (s.call && s.index >= 2 && s.property === 0) score.set('function',(score.get('function')||0)+2);
+    if (!score.size) return 'value';
+    return [...score.entries()].sort((a,b)=>b[1]-a[1])[0][0];
+  };
+  for (const name of suspicious) map.set(name, makeName(bases[scoredBase(name)] || scoredBase(name)));
+
+  // Preserve property names after . and :; rename actual identifiers everywhere else.
+  let out=''; let i=0, quote=null, longClose=null, comment=false, prevSig='';
+  while(i<src.length){
+    const c=src[i];
+    if(comment){out+=c;if(c==='\n')comment=false;i++;continue;}
+    if(longClose){if(src.startsWith(longClose,i)){out+=longClose;i+=longClose.length;longClose=null;}else{out+=c;i++;}continue;}
+    if(quote){out+=c;if(c==='\\'&&i+1<src.length){out+=src[i+1];i+=2;continue;}if(c===quote)quote=null;i++;continue;}
+    if(c==='-'&&src[i+1]==='-'){const lm=src.slice(i).match(/^--(\[=*)\[/);if(lm){const op=lm[0];longClose=']'+lm[1].slice(1)+']';out+=op;i+=op.length;}else{out+='--';i+=2;comment=true;}continue;}
+    if(c==='"'||c==="'"){quote=c;out+=c;i++;continue;}
+    if(c==='['){const lm=src.slice(i).match(/^\[(=*)\[/);if(lm){const op=lm[0];longClose=']'+lm[1]+']';out+=op;i+=op.length;continue;}}
+    const m=src.slice(i).match(/^[A-Za-z_][A-Za-z0-9_]*/);
+    if(m){const w=m[0];const repl=map.get(w);out+=(repl&&prevSig!=='.'&&prevSig!==':'?repl:w);prevSig=repl&&prevSig!=='.'&&prevSig!==':'?repl:w;i+=w.length;continue;}
+    out+=c;if(!/\s/.test(c))prevSig=c;i++;
   }
   return out;
 }
-
 function decodeOnce(text) {
   const trimmed = text.trim();
   if (/^(?:[A-Fa-f0-9]{2})+$/.test(trimmed) && trimmed.length >= 8) {
@@ -439,11 +648,21 @@ async function sourceForAction(message, args, dir) {
   return null;
 }
 
+// Engine runners consume source code, not file-format metadata. Discord attachments
+// and raw URLs may legitimately end in .txt, so normalize only the temporary engine
+// input to .lua. The original label/extension is preserved for the user's result.
+async function normalizeEngineInput(source, dir) {
+  const ext = path.extname(source.input).toLowerCase();
+  if (ext !== '.txt') return source.input;
+  const normalized = path.join(dir, `${path.basename(source.input, ext)}.lua`);
+  await fs.copyFile(source.input, normalized);
+  return normalized;
+}
+
 function statusEmbed(guild, detectedLabel, deobfuscatingLabel, requestedUser, state = 'working') {
   const e = E(guild);
-  const icon = state === 'working' ? e.loading : state === 'done' ? e.done : e.failed;
   const embed = new EmbedBuilder()
-    .setTitle(`${icon} Deobfuscation Status`)
+    .setTitle(state === 'working' ? 'Deobfuscation Status' : state === 'done' ? 'Deobfuscation Complete' : 'Deobfuscation Failed')
     .addFields(
       { name: 'Detected Obfuscator', value: String(detectedLabel || 'Unknown').slice(0, 1024), inline: false },
       { name: 'Deobfuscating', value: String(deobfuscatingLabel || '—').slice(0, 1024), inline: false },
@@ -485,10 +704,12 @@ async function finishResult(message, engineLabel, engineId, sourceLabel, output,
       { name: 'Obfuscator', value: `${engineIcon} ${engineLabel}`, inline: false },
       { name: 'Input', value: String(sourceLabel).slice(0, 1024), inline: false },
       { name: 'Output', value: `${formatSize(bytes)} • source`, inline: false },
-      { name: 'Pastefy', value: paste.url ? `${e.pastefy} ${e.link} [Open result](${paste.url})` : `${e.error} ${paste.error || 'Upload failed.'}`, inline: false },
+      { name: 'Pastefy', value: paste.url ? `${e.pastefy} ${paste.url}` : `${e.error} ${paste.error || 'Upload failed.'}`, inline: false },
     )
     .setFooter({ text: p.truncated ? 'Preview truncated • full result attached.' : 'Full result attached.' });
-  await message.reply({ embeds: [embed], files: [new AttachmentBuilder(output, { name: filename || 'deobfuscated.luau' })] });
+  const cacheId = crypto.randomUUID();
+  resultCache.set(cacheId, { content: resultWithHeader, ownerId: message.author.id, expires: Date.now() + 15 * 60 * 1000, pasteUrl: paste.url || null });
+  await message.reply({ embeds: [embed], components: [resultButtons(message.guild, cacheId, paste.url || null)], files: [new AttachmentBuilder(output, { name: filename || 'deobfuscated.luau' })] });
 }
 
 
@@ -500,14 +721,18 @@ async function runEngineForMessage(message, args, engineId) {
       if (!source) throw new Error('No supported `.lua`, `.luau`, or `.txt` source was found. Attach a file, reply to one, paste code, or provide a direct/raw URL.');
       const engine = get(engineId);
       if (!engine) throw new Error(`Unknown engine: ${engineId}`);
-      const sourceText = await fs.readFile(source.input, 'utf8');
+      const engineInput = await normalizeEngineInput(source, dir);
+      const sourceText = await fs.readFile(engineInput, 'utf8');
       const found = detect(sourceText);
       const detectedLabel = found.engine ? found.engine.label : 'Unknown / not confidently detected';
       const status = await message.reply({ embeds: [statusEmbed(message.guild, detectedLabel, engine.label, `<@${message.author.id}>`, 'working')] });
       const out = path.join(dir, engineId === '77f' ? 'result.luac' : 'result.luau');
-      if (engineId === 'luraph15') await runV15(source.input, out);
-      else {
-        const produced = await engineRunner.run(engineId, source.input, out, dir);
+      if (engineId === 'luraph15') await runV15(engineInput, out);
+      else if (engineId === 'luraph15v2') {
+        const produced = await engineRunner.run(engineId, engineInput, out, dir);
+        if (produced !== out) await fs.copyFile(produced, out);
+      } else {
+        const produced = await engineRunner.run(engineId, engineInput, out, dir);
         if (produced !== out) await fs.copyFile(produced, out);
       }
       const outName = engineId === '77f' ? '77fuscator.deobfuscated.luac' : `${engineId}.deobfuscated${sourceExtension(source.label, '.luau') === '.txt' ? '.luau' : sourceExtension(source.label, '.luau')}`;
@@ -517,22 +742,26 @@ async function runEngineForMessage(message, args, engineId) {
   } finally { await fs.rm(dir, { recursive: true, force: true }).catch(() => {}); }
 }
 
-function makeButton(guild, customId, label, style, emojiName) {
+function makeButton(guild, customId, label, style, emojiName = null) {
   const b = new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
-  const x = buttonEmoji(guild, emojiName); if (x) b.setEmoji(x);
+  const x = emojiName ? buttonEmoji(guild, emojiName) : undefined; if (x) b.setEmoji(x);
   return b;
 }
 function lphRows(guild, prefix = 'lphver') {
-  return [new ActionRowBuilder().addComponents(
-    makeButton(guild, `${prefix}:luraph15`, 'Luraph V15', ButtonStyle.Secondary, 'luraph'),
-    makeButton(guild, `${prefix}:luraph14`, 'Luraph V14.7', ButtonStyle.Secondary, 'luraph'),
-  )];
+  return [
+    new ActionRowBuilder().addComponents(
+      makeButton(guild, `${prefix}:luraph15`, 'Luraph V15 • Version 1', ButtonStyle.Secondary, 'luraph'),
+      makeButton(guild, `${prefix}:luraph15v2`, 'Luraph V15 • Version 2', ButtonStyle.Secondary, 'luraph'),
+      makeButton(guild, `${prefix}:luraph14`, 'Luraph V14.7', ButtonStyle.Secondary, 'luraph'),
+    )
+  ];
 }
 function deobfRows(guild) {
   const specs = [
-    ['luraph15', 'Luraph V15', 'luraph'], ['luraph14', 'Luraph 14.7', 'luraph'], ['moonveil', 'MoonVeil 1.4.5', 'moonveil'], ['luaobf-good', 'Chaotic Good', 'hercules'], ['luaobf-evil', 'Chaotic Evil', 'prometheus'],
-    ['ironbrew2', 'IronBrew2', 'ironbrew2'], ['goofy', 'Goofy', 'goofy'], ['moonsec2', 'MoonSec V2', 'moonsec'], ['ironveil1', 'IronVeil V1', 'ironveil'], ['hercules', 'Hercules', 'hercules'],
-    ['77f', '77fuscator', 'sevenf'], ['prometheus', 'Prometheus', 'prometheus'], ['wearedevs', 'WeAreDevs', 'wrd'],
+    ['luraph15', 'Luraph V15 • V1', 'luraph'], ['luraph15v2', 'Luraph V15 • V2', 'luraph'], ['luraph14', 'Luraph 14.7', 'luraph'], ['moonveil', 'MoonVeil 1.4.5', 'moonveil'], [ 'luaobf-good', 'Chaotic Good', null ],
+    ['luaobf-evil', 'Chaotic Evil', null], ['ironbrew2', 'IronBrew2', 'ironbrew2'], ['goofy', 'Goofy', 'goofy'], ['moonsec2', 'MoonSec V2', 'moonsec'], ['ironveil1', 'IronVeil V1', 'ironveil'],
+    ['hercules', 'Hercules', 'hercules'], ['77f', '77fuscator', 'sevenf'], ['prometheus', 'Prometheus', 'prometheus'], ['wearedevs', 'WeAreDevs', 'wrd'], ['luast', 'LUAST', null],
+    ['flowauth', 'FlowAuth', null], ['hidelat', 'hide.lat', null],
   ];
   const rows = [];
   for (let i = 0; i < specs.length; i += 5) {
@@ -551,7 +780,7 @@ async function handleDeobf(message, args) {
     if (!source) { await fs.rm(dir, { recursive: true, force: true }); return message.reply(`${E(message.guild).error} No supported source found. Attach/reply to a `.lua`, `.luau`, or `.txt` file, or provide a direct/raw URL.`); }
     const copied = path.join(dir, path.basename(source.input)); await fs.copyFile(source.input, copied);
     const id = crypto.randomUUID();
-    const embed = new EmbedBuilder().setTitle(`${E(message.guild).open} Choose deobfuscator`).setDescription('Pick the engine that matches the source. **Luraph V14.7 and V15 are selectable from the same Luraph family.**').addFields({ name: 'Source', value: source.label.slice(0, 1024) });
+    const embed = new EmbedBuilder().setTitle(`${E(message.guild).open} Choose deobfuscator`).setDescription('Pick the engine that matches the source. **Luraph V15 has Version 1 and Version 2; V14.7 is separate.**').addFields({ name: 'Source', value: source.label.slice(0, 1024) });
     const selector = await message.reply({ embeds: [embed], components: deobfRows(message.guild) });
     pending.set(id, { sourcePath: copied, sourceLabel: source.label, dir, selectorMessageId: selector.id, ownerId: message.author.id, expires: Date.now() + 10 * 60 * 1000 });
   } catch (e) { await message.reply(`${E(message.guild).error} ${String(e.message || e).slice(0, 1800)}`); await fs.rm(dir, { recursive: true, force: true }).catch(() => {}); }
@@ -571,6 +800,139 @@ async function handleDetect(message, args) {
   finally { await fs.rm(dir, { recursive: true, force: true }).catch(() => {}); }
 }
 
+async function handleGameDetect(message, args) {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'game-detect-'));
+  try {
+    const source = await sourceForAction(message, args, dir);
+    if (!source) return message.reply(`${E(message.guild).error} No supported source found.`);
+    const text = await fs.readFile(source.input, 'utf8');
+    if (!text.trim()) throw new Error('The source file is empty.');
+
+    const found = await detectGames(text);
+    const e = E(message.guild);
+    const lines = [];
+
+    if (found.games.length) {
+      for (const game of found.games.slice(0, 12)) {
+        const confidence = game.score >= 95 ? 'High' : game.score >= 85 ? 'Strong' : game.score >= 75 ? 'Possible' : 'Low';
+        const evidence = game.evidence ? game.evidence.replace(/`/g, "'").slice(0, 180) : '';
+        lines.push('**' + game.name + '** — ' + confidence + '\n' + game.method + (evidence ? ' • `' + evidence + '`' : ''));
+      }
+    }
+
+    const resolvedIds = found.resolvedPlaceIds.map(x => '`' + x.placeId + '` → **' + x.name + '**').join('\n');
+    const unresolvedIds = found.placeIds.filter(id => !found.resolvedPlaceIds.some(x => x.placeId === id));
+
+    const embed = new EmbedBuilder()
+      .setTitle(`${e.done} Roblox Game Detection`)
+      .setDescription(lines.length ? lines.join('\n\n').slice(0, 3900) : `${e.error} No game name was confidently found in the source.`)
+      .addFields({ name: 'Input', value: String(source.label).slice(0, 1024), inline: false });
+
+    if (resolvedIds) embed.addFields({ name: 'Resolved PlaceIds', value: resolvedIds.slice(0, 1024), inline: false });
+    if (unresolvedIds.length) embed.addFields({ name: 'Unresolved PlaceIds', value: unresolvedIds.map(id => '`' + id + '`').join(', ').slice(0, 1024), inline: false });
+    embed.setFooter({ text: 'Detection checks actual text in the source; it does not require game.PlaceId to be present.' });
+
+    await message.reply({ embeds: [embed] });
+  } catch (e) {
+    await message.reply(`${E(message.guild).error} Game detection failed: ${String(e.message || e).slice(0, 1800)}`);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+async function handlePaste(message, args) {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'paste-bot-'));
+  try {
+    const source = await sourceForAction(message, args, dir);
+    if (!source) return message.reply(`${E(message.guild).error} No supported source found.`);
+    const text = await fs.readFile(source.input, 'utf8');
+    if (!text.trim()) throw new Error('The source file is empty.');
+    const ext = sourceExtension(source.label, path.extname(source.input) || '.txt');
+    const title = path.basename(source.input, path.extname(source.input)) || 'source';
+    const paste = await uploadPastefy(`${title} — Skulx Cli`, text, 'PASTE');
+    if (!paste.url) throw new Error(paste.error || 'Pastefy upload failed.');
+    const e = E(message.guild);
+    const p = makePreview(text);
+    const embed = new EmbedBuilder()
+      .setTitle(`${e.done} Paste created`)
+      .setDescription(`${e.preview} **Preview:**\n\`\`\`lua\n${safeCodeBlock(p.text)}\n\`\`\``)
+      .addFields(
+        { name: 'Input', value: String(source.label).slice(0, 1024), inline: false },
+        { name: 'Pastefy', value: `${e.pastefy} ${paste.url}`, inline: false },
+      )
+      .setFooter({ text: p.truncated ? 'Preview truncated.' : 'Source uploaded as text.' });
+    await message.reply({ embeds: [embed], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Pastefy').setURL(paste.url))] });
+  } catch (e) {
+    await message.reply(`${E(message.guild).error} Paste failed: ${String(e.message || e).slice(0, 1800)}`);
+  } finally { await fs.rm(dir, { recursive: true, force: true }).catch(() => {}); }
+}
+
+async function handlePreview(message, args) {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'preview-bot-'));
+  try {
+    const source = await sourceForAction(message, args, dir);
+    if (!source) return message.reply(`${E(message.guild).error} No supported source found.`);
+    const text = await fs.readFile(source.input, 'utf8');
+    const p = makePreview(text);
+    const e = E(message.guild);
+    const embed = new EmbedBuilder()
+      .setTitle(`${e.preview} File Preview`)
+      .setDescription(`\`\`\`lua\n${safeCodeBlock(p.text)}\n\`\`\``)
+      .addFields({ name: 'Input', value: String(source.label).slice(0, 1024), inline: false })
+      .setFooter({ text: p.truncated ? 'Preview truncated; full source is attached.' : 'Preview only; source was not modified.' });
+    await message.reply({ embeds: [embed], files: [new AttachmentBuilder(source.input, { name: path.basename(source.input) })] });
+  } catch (e) {
+    await message.reply(`${E(message.guild).error} Preview failed: ${String(e.message || e).slice(0, 1800)}`);
+  } finally { await fs.rm(dir, { recursive: true, force: true }).catch(() => {}); }
+}
+
+async function extractUrlAndKey(message, args) {
+  const replied = await repliedMessage(message);
+  const urls = extractUrls(args.join(' ')).concat(extractUrls(allSourceText(message, replied))).filter((u, i, a) => a.indexOf(u) === i);
+  const url = urls[0] || null;
+  const key = process.env.LUARMOR_SCRIPT_KEY || process.env.LRM_SCRIPT_KEY || null;
+  const explicit = args.find(x => !/^https?:\/\//i.test(x) && x.length > 8) || null;
+  return { url, key: explicit || key };
+}
+
+async function handleLuarmor(message, args) {
+  const pair = await extractUrlAndKey(message, args);
+  if (!pair.url) return message.reply(`${E(message.guild).error} Usage: \`${PREFIX}luarmor <Luarmor loader URL> [script key]\``);
+  if (!pair.key) return message.reply(`${E(message.guild).error} A script key is required. Put it in \`LUARMOR_SCRIPT_KEY\` on Railway or provide it after the loader URL.`);
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'luarmor-bot-'));
+  try {
+    await withJob(async () => {
+      const outputDir = path.join(dir, 'out');
+      const out = path.join(dir, 'luarmor-recovered.lua');
+      const status = await message.reply({ embeds: [statusEmbed(message.guild, 'Luarmor', 'Luarmor Fetch', `<@${message.author.id}>`, 'working')] });
+      const produced = await engineRunner.runLuarmor(pair.url, pair.key, out, dir);
+      if (produced !== out) await fs.copyFile(produced, out);
+      await finishResult(message, 'Luarmor Fetch', 'luarmor', pair.url, out, 'luarmor.fetched.luau', false, `<@${message.author.id}>`);
+      await status.edit({ embeds: [statusEmbed(message.guild, 'Luarmor', 'Luarmor Fetch', `<@${message.author.id}>`, 'done')] }).catch(() => {});
+    });
+  } catch (e) {
+    await message.reply(`${E(message.guild).failed} Luarmor fetch failed: ${String(e.message || e).slice(-3500)}`).catch(() => {});
+  } finally { await fs.rm(dir, { recursive: true, force: true }).catch(() => {}); }
+}
+
+async function handleFlowAuth(message, args) {
+  const replied = await repliedMessage(message);
+  const urls = extractUrls(args.join(' ')).concat(extractUrls(allSourceText(message, replied))).filter((u, i, a) => a.indexOf(u) === i);
+  if (!urls.length) return message.reply(`${E(message.guild).error} Usage: \`${PREFIX}flow <FlowAuth loader URL>\` or reply to a message containing the loader URL.`);
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'flowauth-bot-'));
+  try {
+    await withJob(async () => {
+      const out = path.join(dir, 'flowauth.deobfuscated.luau');
+      const status = await message.reply({ embeds: [statusEmbed(message.guild, 'FlowAuth', 'FlowAuth', `<@${message.author.id}>`, 'working')] });
+      const produced = await engineRunner.runFlowAuth(urls[0], out, dir);
+      if (produced !== out) await fs.copyFile(produced, out);
+      await finishResult(message, 'FlowAuth', 'flowauth', urls[0], out, 'flowauth.deobfuscated.luau', false, `<@${message.author.id}>`);
+      await status.edit({ embeds: [statusEmbed(message.guild, 'FlowAuth', 'FlowAuth', `<@${message.author.id}>`, 'done')] }).catch(() => {});
+    });
+  } catch (e) { await message.reply(`${E(message.guild).failed} FlowAuth failed: ${String(e.message || e).slice(-3500)}`).catch(() => {}); }
+  finally { await fs.rm(dir, { recursive: true, force: true }).catch(() => {}); }
+}
+
 async function handleGet(message, args) {
   const replied = await repliedMessage(message);
   const urls = extractUrls(args.join(' ')).concat(extractUrls(allSourceText(message, replied))).filter((u, i, a) => a.indexOf(u) === i);
@@ -584,13 +946,33 @@ async function handleGet(message, args) {
           const r = await fetchBuffer(urls[i]);
           const ext = /\.luau(?:[?#]|$)/i.test(r.finalUrl) ? '.luau' : /\.lua(?:[?#]|$)/i.test(r.finalUrl) ? '.lua' : '.txt';
           const p = path.join(dir, `fetched_${i + 1}${ext}`); await fs.writeFile(p, r.buffer); files.push(new AttachmentBuilder(p, { name: path.basename(p) }));
-          results.push({ url: r.finalUrl, preview: makePreview(r.buffer.toString('utf8')) });
-        } catch (e) { results.push({ url: urls[i], error: String(e.message || e) }); }
+          results.push({ url: r.finalUrl, preview: makePreview(r.buffer.toString('utf8')), mode: 'direct/raw' });
+        } catch (e) {
+          results.push({ url: urls[i], error: String(e.message || e), mode: 'direct/raw' });
+          // If the direct/raw request fails, optionally fall back to the dedicated
+          // Luarmor protocol. This only runs when a script key is configured/provided.
+          const looksLuarmor = /luarmor\.net\/files\/v4\/loaders\//i.test(urls[i]);
+          const key = args.find(x => !/^https?:\/\//i.test(x) && x.length > 8) || process.env.LUARMOR_SCRIPT_KEY || process.env.LRM_SCRIPT_KEY || null;
+          if (looksLuarmor && key) {
+            try {
+              const fallbackOut = path.join(dir, `luarmor_${i + 1}.lua`);
+              const produced = await engineRunner.runLuarmor(urls[i], key, fallbackOut, dir);
+              if (produced !== fallbackOut) await fs.copyFile(produced, fallbackOut);
+              files.push(new AttachmentBuilder(fallbackOut, { name: path.basename(fallbackOut) }));
+              results[results.length - 1] = { url: urls[i], preview: makePreview(await fs.readFile(fallbackOut, 'utf8')), mode: 'Luarmor fallback' };
+            } catch (fallbackErr) {
+              results[results.length - 1].fallbackError = String(fallbackErr.message || fallbackErr);
+            }
+          }
+        }
       }
       const first = results[0];
-      const embed = new EmbedBuilder().setTitle(`${E(message.guild).open} Direct/raw fetch`).setDescription(first.error ? `${E(message.guild).failed} ${first.error}` : `**Raw source preview:**\n\`\`\`lua\n${safeCodeBlock(first.preview.text)}\n\`\`\``).setFooter({ text: files.length ? 'Direct/raw source files attached. HTML pages are rejected.' : 'No direct/raw source could be fetched.' });
+      const embed = new EmbedBuilder()
+        .setTitle(`${E(message.guild).open} Fetch`)
+        .setDescription(first.error && !first.preview ? `${E(message.guild).failed} ${first.error}${first.fallbackError ? `\n${E(message.guild).luarmor} Luarmor fallback: ${first.fallbackError}` : ''}` : `**${first.mode || 'Raw source'} preview:**\n\`\`\`lua\n${safeCodeBlock(first.preview.text)}\n\`\`\``)
+        .setFooter({ text: files.length ? 'Source files attached. HTML pages are rejected; Luarmor fallback is used only for Luarmor loader URLs when a key is available.' : 'No source could be fetched.' });
       await message.reply({ embeds: [embed], files: files.slice(0, 10) });
-      if (results.length > 1) await message.reply(results.slice(1).map((x, i) => x.error ? `${E(message.guild).failed} ${i + 2}. ${x.error}` : `${E(message.guild).done} ${i + 2}. ${x.url}`).join('\n').slice(0, 1900));
+      if (results.length > 1) await message.reply(results.slice(1).map((x, i) => x.error && !x.preview ? `${E(message.guild).failed} ${i + 2}. ${x.error}` : `${E(message.guild).done} ${i + 2}. ${x.url} • ${x.mode}`).join('\n').slice(0, 1900));
     });
   } catch (e) { await message.reply(`${E(message.guild).error} Fetch failed: ${String(e.message || e).slice(0, 1800)}`); }
   finally { await fs.rm(dir, { recursive: true, force: true }).catch(() => {}); }
@@ -619,10 +1001,10 @@ async function handleBeautify(message, args) {
     if (!source) return message.reply(`${E(message.guild).error} No source found.`);
     const text = await fs.readFile(source.input, 'utf8');
     const pretty = withHeader(beautifyLua(text), 'Lua/Luau', 'beautify');
-    const output = path.join(dir, 'beautified.luau'); await fs.writeFile(output, pretty, 'utf8');
+    const ext = sourceExtension(source.label, '.luau'); const output = path.join(dir, `beautified${ext === '.txt' ? '.txt' : ext}`); await fs.writeFile(output, pretty, 'utf8');
     const p = makePreview(pretty);
     const embed = new EmbedBuilder().setTitle(`${E(message.guild).done} Beautify finished`).setDescription(`**Formatting only**\n\n\`\`\`lua\n${safeCodeBlock(p.text)}\n\`\`\``).setFooter({ text: 'No deobfuscation or identifier renaming was performed.' });
-    await message.reply({ embeds: [embed], files: [new AttachmentBuilder(output, { name: 'beautified.luau' })] });
+    await message.reply({ embeds: [embed], files: [new AttachmentBuilder(output, { name: path.basename(output) })] });
   } catch (e) { await message.reply(`${E(message.guild).error} Beautify failed: ${String(e.message || e).slice(0, 1800)}`); }
   finally { await fs.rm(dir, { recursive: true, force: true }).catch(() => {}); }
 }
@@ -634,10 +1016,11 @@ async function handleRename(message, args) {
     if (!source) return message.reply(`${E(message.guild).error} No source found.`);
     const text = await fs.readFile(source.input, 'utf8');
     const renamed = withHeader(renameLua(text), 'Lua/Luau', 'rename');
-    const output = path.join(dir, 'renamed.luau'); await fs.writeFile(output, renamed, 'utf8');
+    const ext = sourceExtension(source.label, '.luau');
+    const output = path.join(dir, `renamed${ext === '.txt' ? '.txt' : ext}`); await fs.writeFile(output, renamed, 'utf8');
     const p = makePreview(renamed);
     const embed = new EmbedBuilder().setTitle(`${E(message.guild).done} Rename finished`).setDescription(`**Maximum safe identifier cleanup**\n\n\`\`\`lua\n${safeCodeBlock(p.text)}\n\`\`\``).setFooter({ text: 'Strings, comments and property names are preserved.' });
-    await message.reply({ embeds: [embed], files: [new AttachmentBuilder(output, { name: 'renamed.luau' })] });
+    await message.reply({ embeds: [embed], files: [new AttachmentBuilder(output, { name: path.basename(output) })] });
   } catch (e) { await message.reply(`${E(message.guild).error} Rename failed: ${String(e.message || e).slice(0, 1800)}`); }
   finally { await fs.rm(dir, { recursive: true, force: true }).catch(() => {}); }
 }
@@ -651,6 +1034,13 @@ client.once('ready', () => console.log(`Logged in as ${client.user.tag}`));
 client.on('interactionCreate', async interaction => {
   if (!interaction.isButton()) return;
   const [kind, id] = interaction.customId.split(':');
+  if (kind === 'copyresult') {
+    const cached = resultCache.get(id);
+    if (!cached || cached.expires < Date.now()) { resultCache.delete(id); return interaction.reply({ content: `${E(interaction.guild).error} This result has expired. Run the command again.`, ephemeral: true }); }
+    if (cached.ownerId && cached.ownerId !== interaction.user.id) return interaction.reply({ content: `${E(interaction.guild).error} Only the user who generated this result can use Copy Output.`, ephemeral: true });
+    const preview = cached.content.length > 1800 ? cached.content.slice(0, 1800) + '\n-- ... output is larger than Discord\'s copyable message limit; use the attached file/Pastefy link. ...' : cached.content;
+    return interaction.reply({ content: `\`\`\`lua\n${safeCodeBlock(preview)}\n\`\`\``, ephemeral: true });
+  }
   if (!['deobf', 'lphver'].includes(kind)) return;
   const pendingId = [...pending.keys()].find(k => pending.get(k)?.selectorMessageId === interaction.message.id);
   if (!pendingId) return interaction.reply({ content: `${E(interaction.guild).error} This selector expired. Run the command again.`, ephemeral: true });
@@ -658,14 +1048,17 @@ client.on('interactionCreate', async interaction => {
   if (state.expires < Date.now()) { pending.delete(pendingId); return interaction.reply({ content: `${E(interaction.guild).error} This selector expired. Run the command again.`, ephemeral: true }); }
   if (state.ownerId && state.ownerId !== interaction.user.id) return interaction.reply({ content: `${E(interaction.guild).error} Only the user who requested this deobfuscation can use these buttons.`, ephemeral: true });
   let engineId = id;
-  if (kind === 'lphver' && !['luraph15', 'luraph14'].includes(id)) return interaction.reply({ content: `${E(interaction.guild).error} Unknown Luraph version.`, ephemeral: true });
+  if (kind === 'lphver' && !['luraph15', 'luraph15v2', 'luraph14'].includes(id)) return interaction.reply({ content: `${E(interaction.guild).error} Unknown Luraph version.`, ephemeral: true });
   const engine = get(engineId);
   if (!engine) return interaction.reply({ content: `${E(interaction.guild).error} Unknown engine.`, ephemeral: true });
   await interaction.deferUpdate();
   const work = await fs.mkdtemp(path.join(os.tmpdir(), 'deobf-click-'));
   try {
     await withJob(async () => {
-      const input = path.join(work, path.basename(state.sourcePath)); await fs.copyFile(state.sourcePath, input);
+      const originalInput = path.join(work, path.basename(state.sourcePath));
+      await fs.copyFile(state.sourcePath, originalInput);
+      const sourceForEngine = { input: originalInput };
+      const input = await normalizeEngineInput(sourceForEngine, work);
       const output = path.join(work, engineId === '77f' ? 'result.luac' : 'result.luau');
       const sourceText = await fs.readFile(input, 'utf8');
       const found = detect(sourceText);
@@ -701,7 +1094,7 @@ client.on('interactionCreate', async interaction => {
             { name: 'Obfuscator', value: `${e[engineEmojiKey(engineId)] || e.done} ${engine.label}`, inline: false },
             { name: 'Input', value: String(state.sourceLabel).slice(0, 1024), inline: false },
             { name: 'Output', value: `${formatSize(bytes)} • source`, inline: false },
-            { name: 'Pastefy', value: paste.url ? `${e.pastefy} ${e.link} [Open result](${paste.url})` : `${e.error} ${paste.error || 'Upload failed.'}`, inline: false },
+            { name: 'Pastefy', value: paste.url ? `${e.pastefy} ${paste.url}` : `${e.error} ${paste.error || 'Upload failed.'}`, inline: false },
           )
           .setFooter({ text: p.truncated ? 'Preview truncated • full result attached.' : 'Full result attached.' });
         const extension = sourceExtension(state.sourceLabel, '.luau');
@@ -721,6 +1114,7 @@ client.on('messageCreate', async message => {
     if (command === 'help') await message.reply({ embeds: [helpEmbed(message.guild)] });
     else if (command === 'deobf') await handleDeobf(message, parts);
     else if (command === 'detect') await handleDetect(message, parts);
+    else if (command === 'game' || command === 'gamedetect' || command === 'gamename') await handleGameDetect(message, parts);
     else if (command === 'lph') {
       const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'lph-select-'));
       try {
@@ -740,8 +1134,8 @@ client.on('messageCreate', async message => {
       else if (mode === 'evil' || mode === 'chaoticevil') await handleDirect(message, parts.slice(1), 'luaobf-evil');
       else {
         const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('deobf:luaobf-good').setLabel('Chaotic Good').setStyle(ButtonStyle.Success),
-          new ButtonBuilder().setCustomId('deobf:luaobf-evil').setLabel('Chaotic Evil').setStyle(ButtonStyle.Danger),
+          makeButton(message.guild, 'deobf:luaobf-good', 'Chaotic Good', ButtonStyle.Success, 'luaobf'),
+          makeButton(message.guild, 'deobf:luaobf-evil', 'Chaotic Evil', ButtonStyle.Danger, 'luaobf'),
         );
         const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'luaobf-select-'));
             const source = await sourceForAction(message, [], dir);
@@ -760,7 +1154,13 @@ client.on('messageCreate', async message => {
     else if (command === '7f') await handleDirect(message, parts, '77f');
     else if (command === 'promdeobf') await handleDirect(message, parts, 'prometheus');
     else if (command === 'wrd') await handleDirect(message, parts, 'wearedevs');
+    else if (command === 'luast') await handleDirect(message, parts, 'luast');
+    else if (command === 'hl') await handleDirect(message, parts, 'hidelat');
+    else if (command === 'flow') await handleFlowAuth(message, parts);
+    else if (command === 'luarmor') await handleLuarmor(message, parts);
     else if (command === 'get') await handleGet(message, parts);
+    else if (command === 'paste') await handlePaste(message, parts);
+    else if (command === 'preview') await handlePreview(message, parts);
     else if (command === 'decode') await handleDecode(message, parts);
     else if (command === 'beautify' || command === 'beutify') await handleBeautify(message, parts);
     else if (command === 'rename') await handleRename(message, parts);
@@ -770,6 +1170,23 @@ client.on('messageCreate', async message => {
 setInterval(() => {
   const now = Date.now();
   for (const [id, state] of pending) if (state.expires < now) { pending.delete(id); fs.rm(state.dir, { recursive: true, force: true }).catch(() => {}); }
+  for (const [id, state] of resultCache) if (state.expires < now) resultCache.delete(id);
 }, 60_000).unref();
+
+// Render Web Services require an HTTP listener. This endpoint reports service health;
+// it does not prevent Render's free instance from sleeping when idle.
+const PORT = Number(process.env.PORT || 10000);
+const healthServer = http.createServer((req, res) => {
+  if (req.url === '/health' || req.url === '/') {
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end(client.isReady() ? 'Skulx Discord Bot is online' : 'Skulx Discord Bot is starting');
+    return;
+  }
+  res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+  res.end('Not Found');
+});
+healthServer.listen(PORT, '0.0.0.0', () => {
+  console.log(`HTTP health server listening on port ${PORT}`);
+});
 
 client.login(TOKEN);

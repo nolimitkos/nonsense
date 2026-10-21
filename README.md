@@ -17,10 +17,14 @@ The bot does not store the Pastefy token in source. Pastefy API v2 uses `POST /p
 
 - `.help` — command list
 - `.deobf` — interactive deobfuscator selector
-- `.lph` — choose Luraph V15 or V14.7
+- `.lph` — choose Luraph V15 Version 1, V15 Version 2, or V14.7
 - `.luraph` — V14.7 compatibility alias
 - `.mv` — MoonVeil 1.4.5
 - `.luaobf` — choose Chaotic Good / Chaotic Evil
+- `.luast` — LUAST deobfuscator
+- `.flow` — FlowAuth loader/deobfuscation pipeline
+- `.hl` — hide.lat lite deobfuscator
+- `.luarmor` — authorized Luarmor fetcher
 - `.ib` — IronBrew2
 - `.goofy` — Goofyfuscator V10
 - `.ms` — MoonSec V2
@@ -30,7 +34,7 @@ The bot does not store the Pastefy token in source. Pastefy API v2 uses `POST /p
 - `.promdeobf` — Prometheus
 - `.wrd` — WeAreDevs Prometheus-family
 - `.detect` — obfuscator detection
-- `.get` — direct/raw fetching only; HTML is rejected
+- `.get` — direct/raw fetching; HTML is rejected, with an optional Luarmor fallback for Luarmor loader URLs
 - `.decode` — non-executing encoding decoder
 - `.beautify` / `.beutify` — formatting only
 - `.rename` — identifier cleanup

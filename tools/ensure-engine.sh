@@ -48,6 +48,26 @@ case "$ENGINE" in
   luaobf-good)
     need_clone https://github.com/axomtools/luaobfuscator-chaoticgood-deobf.git luaobfuscator-chaoticgood-deobf
     ;;
+  luraph15v2)
+    need_clone https://github.com/Aditya-lua/Deobfuscator-Luraph-V15.git luraph-v15-v2
+    (cd "$DEST/luraph-v15-v2" && npm install --omit=dev)
+    ;;
+  luast)
+    need_clone https://github.com/Aditya-lua/Luast.git Luast
+    ;;
+  flowauth)
+    need_clone https://github.com/Aditya-lua/FlowAuth-Deobfuscator.git FlowAuth-Deobfuscator
+    need_clone https://github.com/Aditya-lua/Deobfuscator-Luraph-V15.git luraph-v15-v2
+    (cd "$DEST/luraph-v15-v2" && npm install --omit=dev)
+    ;;
+  luarmor)
+    need_clone https://github.com/Aditya-lua/Luarmor-Fetch.git Luarmor-Fetch
+    need_clone https://github.com/Aditya-lua/Deobfuscator-Luraph-V15.git luraph-v15-v2
+    (cd "$DEST/luraph-v15-v2" && npm install --omit=dev)
+    ;;
+  hidelat)
+    need_clone https://github.com/axomtools/hidelat-deobfuscator-byaxom.git hidelat-deobfuscator-byaxom
+    ;;
   ironbrew2)
     need_clone https://github.com/axomtools/ironbrew2-deobfuscator.git ironbrew2-deobfuscator
     if [ -f "$DEST/ironbrew2-deobfuscator/requirements.txt" ]; then python3 -m pip install --break-system-packages -r "$DEST/ironbrew2-deobfuscator/requirements.txt"; fi

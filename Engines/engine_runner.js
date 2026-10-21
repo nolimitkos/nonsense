@@ -78,11 +78,13 @@ async function runChaoticGood(input, output) {
   const root = path.join(ENGINE_ROOT, 'luaobfuscator-chaoticgood-deobf');
   if (!exists(root)) throw new Error('LuaObfuscator Chaotic Good engine is not installed. Run tools/setup-engines.sh.');
   const script = path.join(root, 'deobfuscate.py');
+  if (!exists(script)) throw new Error('LuaObfuscator Chaotic Good deobfuscator.py is missing.');
   const py = process.env.PYTHON_BIN || 'python3';
-  const wrapper = `import sys\nsys.path.insert(0, r${JSON.stringify(root)})\nfrom deobfuscate import deobfuscatechaoticgood\nsrc=open(r${JSON.stringify(input)}, 'r', encoding='utf-8', errors='ignore').read()\nout=deobfuscatechaoticgood(src)\nif not out: raise SystemExit(2)\nopen(r${JSON.stringify(output)}, 'w', encoding='utf-8').write(out)\n`;
-  const tmp = path.join(root, '.bot_runner.py');
+  const wrapper = `import sys\nsys.path.insert(0, r${JSON.stringify(root)})\ntry:\n from deobfuscate import deobfuscatechaoticgood\nexcept Exception as e:\n raise SystemExit('LuaObfuscator Chaotic Good import failed: '+str(e))\nsrc=open(r${JSON.stringify(input)}, 'r', encoding='utf-8', errors='ignore').read()\nout=deobfuscatechaoticgood(src)\nif not out: raise SystemExit(2)\nopen(r${JSON.stringify(output)}, 'w', encoding='utf-8').write(out)\n`;
+  const tmp = path.join(workdir, 'run-luaobf-good.py');
   await fs.writeFile(tmp, wrapper, 'utf8');
-  try { await command(py, [tmp], root); } finally { await fs.rm(tmp, { force: true }).catch(() => {}); }
+  try { await command(py, [tmp], workdir); } finally { await fs.rm(tmp, { force: true }).catch(() => {}); }
+  if (!exists(output)) throw new Error('LuaObfuscator Chaotic Good produced no output.');
   return output;
 }
 
@@ -171,11 +173,76 @@ async function runHercules(input, output) {
 }
 
 
+
+async function runLuraphV15V2(input, output) {
+  const root = path.join(ENGINE_ROOT, 'luraph-v15-v2');
+  const script = path.join(root, 'deob.js');
+  if (!exists(script)) throw new Error('Luraph V15 Version 2 engine is not installed. Run tools/setup-engines.sh.');
+  await command(process.execPath, [script, input, '--output', output], root);
+  if (!exists(output)) throw new Error('Luraph V15 Version 2 produced no output file.');
+  return output;
+}
+
+async function runLuast(input, output) {
+  const root = path.join(ENGINE_ROOT, 'Luast');
+  const script = path.join(root, 'deobfuscate.py');
+  if (!exists(script)) throw new Error('LUAST engine is not installed. Run tools/setup-engines.sh.');
+  await command(process.env.PYTHON_BIN || 'python3', [script, input, '-o', output], root);
+  if (!exists(output)) throw new Error('LUAST engine produced no output file.');
+  return output;
+}
+
+async function runHideLat(input, output) {
+  const root = path.join(ENGINE_ROOT, 'hidelat-deobfuscator-byaxom');
+  const script = path.join(root, 'main.lua');
+  if (!exists(script)) throw new Error('hide.lat engine is not installed. Run tools/setup-engines.sh.');
+  const lua = process.env.LUA53_BIN || 'lua5.3';
+  await command(lua, [script, input, output], root);
+  if (!exists(output)) throw new Error('hide.lat engine produced no output file.');
+  return output;
+}
+
+async function runFlowAuth(loaderUrl, output, workdir) {
+  await ensureEngine('flowauth');
+  const root = path.join(ENGINE_ROOT, 'FlowAuth-Deobfuscator');
+  const script = path.join(root, 'flowauth_crack', 'flowauth_two_phase.py');
+  if (!exists(script)) throw new Error('FlowAuth engine is not installed. Run tools/setup-engines.sh.');
+  const sandbox = path.join(ENGINE_ROOT, 'luraph-v15-v2');
+  if (!exists(path.join(sandbox, 'core', 'harness.py'))) throw new Error('FlowAuth sandbox dependency is missing.');
+  await command(process.env.PYTHON_BIN || 'python3', [script, '--loader-url', loaderUrl], root, { FLOWAUTH_REPO: sandbox });
+  const candidate = await newestFile(path.join(root, 'work'), x => /\.lua$/i.test(x) && /payload|deobf|lift|recovered/i.test(path.basename(x)));
+  if (!candidate) throw new Error('FlowAuth finished without a recovered Lua/Luau payload.');
+  await fs.copyFile(candidate, output);
+  return output;
+}
+
+async function runLuarmor(loaderUrl, scriptKey, output, workdir) {
+  await ensureEngine('luarmor');
+  const root = path.join(ENGINE_ROOT, 'Luarmor-Fetch');
+  const script = path.join(root, 'main.py');
+  if (!exists(script)) throw new Error('Luarmor Fetch engine is not installed. Run tools/setup-engines.sh.');
+  const sandbox = path.join(ENGINE_ROOT, 'luraph-v15-v2');
+  if (!exists(path.join(sandbox, 'core', 'harness.py'))) throw new Error('Luarmor sandbox dependency is missing.');
+  const outDir = path.join(workdir, 'luarmor-out');
+  await fs.mkdir(outDir, { recursive: true });
+  await command(process.env.PYTHON_BIN || 'python3', [script, 'two-phase', '--loader-url', loaderUrl, '--repo', sandbox, '--output', outDir], root, { LRM_SCRIPT_KEY: scriptKey, LUARMOR_REPO: sandbox });
+  const candidate = await newestFile(outDir, x => /\.lua$/i.test(x));
+  if (!candidate) {
+    const candidate2 = await newestFile(path.join(root, 'work', 'out'), x => /\.lua$/i.test(x));
+    if (candidate2) await fs.copyFile(candidate2, output);
+  } else await fs.copyFile(candidate, output);
+  if (!exists(output)) throw new Error('Luarmor fetch finished without a recovered Lua/Luau source.');
+  return output;
+}
+
 async function run(engine, input, output, workdir) {
   await ensureEngine(engine);
   switch (engine) {
     case 'luraph14':
     case 'moonveil': return runLuaVmp(input, path.join(workdir, 'vmp-output'));
+    case 'luraph15v2': return runLuraphV15V2(input, output);
+    case 'luast': return runLuast(input, output);
+    case 'hidelat': return runHideLat(input, output);
     case 'luaobf-good': return runChaoticGood(input, output);
     case 'luaobf-evil': {
       const mod = path.join(ROOT, 'Engines', 'luaobf_chaotic_evil.py');
@@ -195,8 +262,10 @@ async function run(engine, input, output, workdir) {
     case 'prometheus':
     case 'wearedevs': return runPrometheus(input, output);
     case 'hercules': return runHercules(input, output);
+    case 'flowauth': throw new Error('FlowAuth requires a loader URL; use the .flow command.');
+    case 'luarmor': throw new Error('Luarmor requires a loader URL and script key; use the .luarmor command.');
     default: throw new Error(`Unknown engine '${engine}'.`);
   }
 }
 
-module.exports = { run, command, exists };
+module.exports = { run, runFlowAuth, runLuarmor, command, exists };

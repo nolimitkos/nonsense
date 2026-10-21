@@ -7,16 +7,16 @@ ENV PATH="/usr/local/bin:${PATH}"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip python3-venv git cmake ninja-build g++ build-essential \
-    ca-certificates curl unzip bash && rm -rf /var/lib/apt/lists/*
+    ca-certificates curl unzip bash lua5.3 && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY Deobfuscator ./Deobfuscator
 COPY Engines ./Engines
 COPY tools ./tools
-COPY package.json bot.js ./
+COPY package.json bot.js GameDetector.js ./
 
 # Build the Linux Luau binaries required by the bundled Luraph V15 engine.
-# Keep the two targets separate for maximum CMake compatibility on Railway.
+# Keep the two targets separate for maximum CMake compatibility on cloud hosts.
 ARG LUAU_VERSION=0.709
 RUN git clone --filter=blob:none --depth 1 --branch ${LUAU_VERSION} https://github.com/luau-lang/luau.git /tmp/luau \
     && cmake -S /tmp/luau -B /tmp/luau/cmake -G Ninja \
@@ -35,7 +35,7 @@ RUN npm install --omit=dev
 
 # Third-party engines are installed lazily when their command is first used.
 # This prevents a single optional engine/repository failure from making the
-# entire Railway Docker build fail.
+# entire Docker build fail.
 RUN chmod +x tools/*.sh
 
 CMD ["node", "bot.js"]
