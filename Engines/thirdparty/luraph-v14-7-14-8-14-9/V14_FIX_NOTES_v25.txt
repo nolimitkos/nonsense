@@ -1,0 +1,9 @@
+v25 - large-script root recovery
+
+- Fixes v14.7/14.8/14.9 runs where a large script aborts in a pure-VM endless loop before runtime root attribution is available.
+- When root_candidates is missing, derives candidates from every captured proto, prioritizing the current VM factory group.
+- Adds a cheap SCCP/request-only root screening phase before expensive full structuring.
+- Large helper-only roots are penalized; candidates are ranked by unresolved-state ratio and reachable function graph size.
+- If a full lift still resolves to bootstrap scaffolding, only the strongest quick-screened alternates are fully structured.
+- Keeps v24 AttributeChanged/AncestryChanged/ChildRemoved/DescendantRemoving probe cleanup.
+- Fixes ir.py invalid \% escape SyntaxWarning.

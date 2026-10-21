@@ -14,7 +14,7 @@ const ensured = new Set();
 function exists(p) { try { return fsSync.existsSync(p); } catch { return false; } }
 
 async function ensureEngine(engine) {
-  if (engine === 'luaobf-evil' || ensured.has(engine)) return;
+  if (engine === 'luaobf-evil' || engine === 'luraph151' || engine === 'goofyscator-v11' || engine.startsWith('luraph14') || ensured.has(engine)) return;
   if (!exists(ENSURE_ENGINE)) throw new Error('Engine installer is missing.');
   await command('bash', [ENSURE_ENGINE, engine], ROOT);
   ensured.add(engine);
@@ -174,12 +174,52 @@ async function runHercules(input, output) {
 
 
 
+async function runLuraphV14x(input, output, version) {
+  const root = path.join(ENGINE_ROOT, 'luraph-v14-7-14-8-14-9');
+  const script = path.join(root, 'cli.py');
+  const runtime = path.join(root, 'bin', 'luau');
+  if (!exists(script)) throw new Error('Bundled Luraph V14.7/V14.8/V14.9 backend is missing.');
+  if (!exists(runtime)) throw new Error('Luraph V14 runtime is missing. Rebuild/redeploy the Docker image.');
+  await command(process.env.PYTHON_BIN || 'python3', [script, input, '--engine', version, '--output', output, '--luau', runtime, '--timeout', '120', '--budget', '30'], root, { PYTHONUNBUFFERED: '1' });
+  if (!exists(output)) throw new Error(`Luraph V${version} produced no output file.`);
+  return output;
+}
+
 async function runLuraphV15V2(input, output) {
   const root = path.join(ENGINE_ROOT, 'luraph-v15-v2');
   const script = path.join(root, 'deob.js');
   if (!exists(script)) throw new Error('Luraph V15 Version 2 engine is not installed. Run tools/setup-engines.sh.');
   await command(process.execPath, [script, input, '--output', output], root);
   if (!exists(output)) throw new Error('Luraph V15 Version 2 produced no output file.');
+  return output;
+}
+
+
+async function runLuraphV151(input, output, workdir) {
+  const root = path.join(ENGINE_ROOT, 'luraph-v15.1');
+  const script = path.join(root, 'deob.js');
+  if (!exists(script)) throw new Error('Luraph V15.1 backend is missing from the deployment.');
+  const runtime = path.join(ROOT, 'Deobfuscator', 'bin');
+  const env = { LUAENVLOG_LUAU_BIN: runtime, PYTHON_BIN: process.env.PYTHON_BIN || 'python3', TMPDIR: workdir, TMP: workdir, TEMP: workdir };
+  await command(process.execPath, [script, input, '-o', output, '--plugin', 'luraph_v15', '--executor', 'Potassium', '--timeout', '90', '--budget', '15', '--max-runs', '4'], root, env);
+  if (!exists(output)) throw new Error('Luraph V15.1 produced no output file.');
+  return output;
+}
+
+async function runGoofyscatorV11(input, output, workdir) {
+  const root = path.join(ENGINE_ROOT, 'goofyscator-v11', 'engines');
+  const cli = path.join(root, 'goofyscator', 'cli.mjs');
+  if (!exists(cli)) throw new Error('Goofyscator V11 backend is missing from the deployment.');
+  const report = path.join(workdir, 'goofyscator-report.json');
+  const tsx = require.resolve('tsx/cli');
+  await command(process.execPath, [tsx, cli, input, report], root, { GOOFY_SKIP_NATIVE_VALIDATION: '1' });
+  const recovered = path.join(workdir, 'deobfuscated.lua');
+  if (!exists(recovered)) {
+    let details = '';
+    if (exists(report)) { try { details = JSON.parse(await fs.readFile(report, 'utf8')).recoveryError || ''; } catch {} }
+    throw new Error('Goofyscator V11 could not fully recover this input; no recovered Lua was generated.' + (details ? ' ' + details.slice(0, 900) : ''));
+  }
+  await fs.copyFile(recovered, output);
   return output;
 }
 
@@ -238,9 +278,13 @@ async function runLuarmor(loaderUrl, scriptKey, output, workdir) {
 async function run(engine, input, output, workdir) {
   await ensureEngine(engine);
   switch (engine) {
-    case 'luraph14':
+    case 'luraph147': return runLuraphV14x(input, output, '14.7');
+    case 'luraph148': return runLuraphV14x(input, output, '14.8');
+    case 'luraph149': return runLuraphV14x(input, output, '14.9');
     case 'moonveil': return runLuaVmp(input, path.join(workdir, 'vmp-output'));
     case 'luraph15v2': return runLuraphV15V2(input, output);
+    case 'luraph151': return runLuraphV151(input, output, workdir);
+    case 'goofyscator-v11': return runGoofyscatorV11(input, output, workdir);
     case 'luast': return runLuast(input, output);
     case 'hidelat': return runHideLat(input, output);
     case 'luaobf-good': return runChaoticGood(input, output);

@@ -40,3 +40,20 @@ The bot does not store the Pastefy token in source. Pastefy API v2 uses `POST /p
 - `.rename` — identifier cleanup
 
 All deobfuscation results receive a Skulx Cli header, are attached to Discord, and are uploaded to Pastefy when the API token is configured.
+
+
+## Added recovery engines
+
+- `.gv11d` — Goofyscator V11 BETA-1. The `.deobf` selector includes it as a primary option. It reports failure rather than presenting diagnostic JSON as recovered Lua.
+- `.lph151` — Luraph V15.1, installed as a separate backend and kept distinct from Luraph V15 Version 1 / Version 2.
+- Goofyscator native Luau compile validation is skipped only when its bundled Linux runtime is unavailable; recovery remains best-effort and output should be reviewed.
+
+## Luraph version routing
+
+- `.lph` opens a selector for V15 Version 1, V15 Version 2, V15.1, and V14.7/V14.8/V14.9.
+- `.lph147`, `.lph148`, and `.lph149` force the matching bundled V14 backend.
+- `.lph151` uses the separate V15.1 engine.
+- V15 Version 1 continues to use the original `Deobfuscator/deob.js` pipeline; it is not routed through V15.1.
+- Text outputs start with `-- This file was deobfuscated by Skulx Cli` followed by a blank line.
+
+The V14.7/V14.8/V14.9 backend is bundled under `Engines/thirdparty/luraph-v14-7-14-8-14-9`. The Docker build places the Linux Luau runtime and AST executable in that backend's `bin/` directory.

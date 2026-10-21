@@ -67,7 +67,7 @@ function E(guild) {
 
 function engineEmojiKey(engineId) {
   return ({
-    luraph15: 'luraph', luraph15v2: 'luraph', luraph14: 'luraph', luarmor: 'luarmor', moonveil: 'moonveil', 'luaobf-good': null, 'luaobf-evil': null,
+    luraph15: 'luraph', luraph15v2: 'luraph', luraph151: 'luraph', 'goofyscator-v11': 'goofy', luraph14: 'luraph', luraph147: 'luraph', luraph148: 'luraph', luraph149: 'luraph', luarmor: 'luarmor', moonveil: 'moonveil', 'luaobf-good': null, 'luaobf-evil': null,
     ironbrew2: 'ironbrew2', goofy: 'goofy', moonsec2: 'moonsec', ironveil1: 'ironveil', hercules: 'hercules', '77f': 'sevenf', prometheus: 'prometheus', wearedevs: 'wrd', luast: null, flowauth: null, hidelat: null
   })[engineId] || null;
 }
@@ -77,6 +77,7 @@ function actionVerb(kind) {
 }
 
 function makeHeader(obfuscator, kind = 'deobfuscate', date = new Date()) {
+  if (kind === 'deobfuscate') return '-- This file was deobfuscated by Skulx Cli';
   const time = date.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, ' UTC');
   return `-- This file was ${actionVerb(kind)} by Skulx Cli | ${obfuscator} | ${time}`;
 }
@@ -89,7 +90,7 @@ function stripForeignHeaders(content) {
     const line = lines[0];
     const t = line.trim();
     if (!t) { lines.shift(); removed.push(line); continue; }
-    if (/^--/.test(t) && /(deobfuscat|obfuscat|decompiler|decompiler|generated|watermark|credits?|made by|github\.com|discord\.gg|license)/i.test(t)) {
+    if (/^--/.test(t) && /(deobfuscat|devirtualiz|obfuscat|decompiler|generated|watermark|credits?|made by|github\.com|discord\.gg|license)/i.test(t)) {
       lines.shift(); removed.push(line); continue;
     }
     break;
@@ -98,7 +99,7 @@ function stripForeignHeaders(content) {
 }
 function withHeader(content, obfuscator, kind = 'deobfuscate') {
   const body = stripForeignHeaders(content);
-  return `${makeHeader(obfuscator, kind)}\n${body}`;
+  return kind === 'deobfuscate' ? `${makeHeader(obfuscator, kind)}\n\n${body}` : `${makeHeader(obfuscator, kind)}\n${body}`;
 }
 
 function formatSize(bytes) {
@@ -134,8 +135,11 @@ function helpEmbed(guild) {
     {
       name: 'Luraph and Lua engines',
       commands: [
-        [`${PREFIX}lph`, 'Choose Luraph V15 Version 1, V15 Version 2, or V14.7.'],
-        [`${PREFIX}luraph`, 'Compatibility alias for Luraph V14.7.'],
+        [`${PREFIX}lph`, 'Choose Luraph V15, V15.1, V14.7, V14.8, or V14.9.'],
+        [`${PREFIX}lph147`, 'Run the Luraph V14.7 backend directly.'],
+        [`${PREFIX}lph148`, 'Run the Luraph V14.8 backend directly.'],
+        [`${PREFIX}lph149`, 'Run the Luraph V14.9 backend directly.'],
+        [`${PREFIX}lph151`, 'Run the separate Luraph V15.1 backend directly.'],
         [`${PREFIX}luaobf`, 'Choose Chaotic Good / Chaotic Evil; or use `.luaobf good` and `.luaobf evil`.'],
         [`${PREFIX}mv`, 'MoonVeil 1.4.5.'],
         [`${PREFIX}luast`, 'LUAST deobfuscator.'],
@@ -800,16 +804,24 @@ function lphRows(guild, prefix = 'lphver') {
     new ActionRowBuilder().addComponents(
       makeButton(guild, `${prefix}:luraph15`, 'Luraph V15 • Version 1', ButtonStyle.Secondary, 'luraph'),
       makeButton(guild, `${prefix}:luraph15v2`, 'Luraph V15 • Version 2', ButtonStyle.Secondary, 'luraph'),
-      makeButton(guild, `${prefix}:luraph14`, 'Luraph V14.7', ButtonStyle.Secondary, 'luraph'),
+      makeButton(guild, `${prefix}:luraph147`, 'Luraph V14.7', ButtonStyle.Secondary, 'luraph'),
+      makeButton(guild, `${prefix}:luraph148`, 'Luraph V14.8', ButtonStyle.Secondary, 'luraph'),
+      makeButton(guild, `${prefix}:luraph149`, 'Luraph V14.9', ButtonStyle.Secondary, 'luraph'),
+    ),
+    new ActionRowBuilder().addComponents(
+      makeButton(guild, `${prefix}:luraph151`, 'Luraph V15.1', ButtonStyle.Primary, 'luraph'),
     )
   ];
 }
 function deobfRows(guild) {
   const specs = [
-    ['luraph15', 'Luraph V15 • V1', 'luraph'], ['luraph15v2', 'Luraph V15 • V2', 'luraph'], ['luraph14', 'Luraph 14.7', 'luraph'], ['moonveil', 'MoonVeil 1.4.5', 'moonveil'], [ 'luaobf-good', 'Chaotic Good', null ],
-    ['luaobf-evil', 'Chaotic Evil', null], ['ironbrew2', 'IronBrew2', 'ironbrew2'], ['goofy', 'Goofy', 'goofy'], ['moonsec2', 'MoonSec V2', 'moonsec'], ['ironveil1', 'IronVeil V1', 'ironveil'],
-    ['hercules', 'Hercules', 'hercules'], ['77f', '77fuscator', 'sevenf'], ['prometheus', 'Prometheus', 'prometheus'], ['wearedevs', 'WeAreDevs', 'wrd'], ['luast', 'LUAST', null],
-    ['flowauth', 'FlowAuth', null], ['hidelat', 'hide.lat', null],
+    ['goofyscator-v11', 'Goofyscator V11', 'goofy'],
+    ['luraph151', 'Luraph V15.1', 'luraph'],
+    ['luraph15', 'Luraph V15 • V1', 'luraph'],
+    ['luraph15v2', 'Luraph V15 • V2', 'luraph'],
+    ['luraph147', 'Luraph V14.7', 'luraph'],
+    ['luraph148', 'Luraph V14.8', 'luraph'],
+    ['luraph149', 'Luraph V14.9', 'luraph'],
   ];
   const rows = [];
   for (let i = 0; i < specs.length; i += 5) {
@@ -828,7 +840,7 @@ async function handleDeobf(message, args) {
     if (!source) { await fs.rm(dir, { recursive: true, force: true }); return message.reply(`${E(message.guild).error} No supported source found. Attach/reply to a `.lua`, `.luau`, or `.txt` file, or provide a direct/raw URL.`); }
     const copied = path.join(dir, path.basename(source.input)); await fs.copyFile(source.input, copied);
     const id = crypto.randomUUID();
-    const embed = new EmbedBuilder().setTitle(`${E(message.guild).open} Choose deobfuscator`).setDescription('Pick the engine that matches the source. **Luraph V15 has Version 1 and Version 2; V14.7 is separate.**').addFields({ name: 'Source', value: source.label.slice(0, 1024) });
+    const embed = new EmbedBuilder().setTitle(`${E(message.guild).open} Choose deobfuscator`).setDescription('Choose a recovery engine. **Luraph V15.1, V15, and V14.7/V14.8/V14.9 use separate backends.**').addFields({ name: 'Source', value: source.label.slice(0, 1024) });
     const selector = await message.reply({ embeds: [embed], components: deobfRows(message.guild) });
     pending.set(id, { sourcePath: copied, sourceLabel: source.label, dir, selectorMessageId: selector.id, ownerId: message.author.id, expires: Date.now() + 10 * 60 * 1000 });
   } catch (e) { await message.reply(`${E(message.guild).error} ${String(e.message || e).slice(0, 1800)}`); await fs.rm(dir, { recursive: true, force: true }).catch(() => {}); }
@@ -1096,7 +1108,7 @@ client.on('interactionCreate', async interaction => {
   if (state.expires < Date.now()) { pending.delete(pendingId); return interaction.reply({ content: `${E(interaction.guild).error} This selector expired. Run the command again.`, ephemeral: true }); }
   if (state.ownerId && state.ownerId !== interaction.user.id) return interaction.reply({ content: `${E(interaction.guild).error} Only the user who requested this deobfuscation can use these buttons.`, ephemeral: true });
   let engineId = id;
-  if (kind === 'lphver' && !['luraph15', 'luraph15v2', 'luraph14'].includes(id)) return interaction.reply({ content: `${E(interaction.guild).error} Unknown Luraph version.`, ephemeral: true });
+  if (kind === 'lphver' && !['luraph15', 'luraph15v2', 'luraph147', 'luraph148', 'luraph149', 'luraph151'].includes(id)) return interaction.reply({ content: `${E(interaction.guild).error} Unknown Luraph version.`, ephemeral: true });
   const engine = get(engineId);
   if (!engine) return interaction.reply({ content: `${E(interaction.guild).error} Unknown engine.`, ephemeral: true });
   await interaction.deferUpdate();
@@ -1113,6 +1125,7 @@ client.on('interactionCreate', async interaction => {
       const detectedLabel = found.engine ? found.engine.label : 'Unknown / not confidently detected';
       await interaction.editReply({ embeds: [statusEmbed(interaction.guild, detectedLabel, engine.label, `<@${interaction.user.id}>`, 'working')], components: [] });
       if (engineId === 'luraph15') await runV15(input, output);
+      else if (engineId === 'luraph151' || engineId === 'goofyscator-v11' || ['luraph147', 'luraph148', 'luraph149'].includes(engineId)) { const produced = await engineRunner.run(engineId, input, output, work); if (produced !== output) await fs.copyFile(produced, output); }
       else {
         const produced = await engineRunner.run(engineId, input, output, work);
         if (produced !== output) await fs.copyFile(produced, output);
@@ -1170,11 +1183,15 @@ client.on('messageCreate', async message => {
         if (!source) return message.reply(`${E(message.guild).error} No supported source found.`);
         const copied = path.join(dir, path.basename(source.input)); await fs.copyFile(source.input, copied);
         const key = crypto.randomUUID();
-        const selector = await message.reply({ embeds: [new EmbedBuilder().setTitle(`${E(message.guild).open} Luraph version`).setDescription('Choose which Luraph engine to use. V14.7 and V15 are separate engines.').addFields({ name: 'Source', value: source.label.slice(0, 1024) })], components: lphRows(message.guild) });
+        const selector = await message.reply({ embeds: [new EmbedBuilder().setTitle(`${E(message.guild).open} Luraph version`).setDescription('Choose the matching Luraph version. V14.7, V14.8, V14.9, V15, and V15.1 use separate engine paths.').addFields({ name: 'Source', value: source.label.slice(0, 1024) })], components: lphRows(message.guild) });
         pending.set(key, { sourcePath: copied, sourceLabel: source.label, dir, selectorMessageId: selector.id, ownerId: message.author.id, expires: Date.now() + 10 * 60 * 1000 });
       } catch (e) { await fs.rm(dir, { recursive: true, force: true }).catch(() => {}); throw e; }
     }
-    else if (command === 'luraph') await handleDirect(message, parts, 'luraph14');
+    else if (command === 'luraph' || command === 'lph147' || command === 'luraph147') await handleDirect(message, parts, 'luraph147');
+    else if (command === 'lph148' || command === 'luraph148') await handleDirect(message, parts, 'luraph148');
+    else if (command === 'lph149' || command === 'luraph149') await handleDirect(message, parts, 'luraph149');
+    else if (command === 'lph151' || command === 'luraph151') await handleDirect(message, parts, 'luraph151');
+    else if (command === 'gv11d' || command === 'goofyscator') await handleDirect(message, parts, 'goofyscator-v11');
     else if (command === 'mv') await handleDirect(message, parts, 'moonveil');
     else if (command === 'luaobf') {
       const mode = (parts[0] || '').toLowerCase();

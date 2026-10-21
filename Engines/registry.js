@@ -1,9 +1,13 @@
 'use strict';
 
 const ENGINES = [
-  { id: 'luraph15', label: 'Luraph V15 • Version 1', command: '.lph', color: 0x5865F2, detect: [/Luraph Obfuscator v15/i, /LPH_[A-Z_]+/i, /This file was protected using Luraph Obfuscator v15/i] },
-  { id: 'luraph15v2', label: 'Luraph V15 • Version 2', command: '.lph', color: 0x5865F2, detect: [/Luraph Obfuscator v15/i, /LPH_[A-Z_]+/i, /This file was protected using Luraph Obfuscator v15/i] },
-  { id: 'luraph14', label: 'Luraph V14.7', command: '.lph', color: 0x5865F2, detect: [/Luraph Obfuscator v14\.7/i, /Luraph v14\.7/i] },
+  { id: 'luraph15', label: 'Luraph V15 • Version 1', command: '.lph', color: 0x5865F2, detect: [/Luraph Obfuscator v15(?!\.1)/i, /This file was protected using Luraph Obfuscator v15(?!\.1)/i] },
+  { id: 'luraph15v2', label: 'Luraph V15 • Version 2', command: '.lph', color: 0x5865F2, detect: [/Luraph Obfuscator v15(?!\.1)/i, /This file was protected using Luraph Obfuscator v15(?!\.1)/i] },
+  { id: 'luraph151', label: 'Luraph V15.1', command: '.lph151', color: 0x5865F2, detect: [/Luraph Obfuscator v15\.1/i, /Luraph v15\.1/i] },
+  { id: 'goofyscator-v11', label: 'Goofyscator V11 BETA-1', command: '.gv11d', color: 0xFEE75C, detect: [/Goofyscator V11/i, /GUF_ENCNUM/i, /Goofy V11/i] },
+  { id: 'luraph147', label: 'Luraph V14.7', command: '.lph147', color: 0x5865F2, detect: [/Luraph Obfuscator v14\.7/i, /Luraph v14\.7/i] },
+  { id: 'luraph148', label: 'Luraph V14.8', command: '.lph148', color: 0x5865F2, detect: [/Luraph Obfuscator v14\.8/i, /Luraph v14\.8/i] },
+  { id: 'luraph149', label: 'Luraph V14.9', command: '.lph149', color: 0x5865F2, detect: [/Luraph Obfuscator v14\.9/i, /Luraph v14\.9/i] },
   { id: 'moonveil', label: 'MoonVeil 1.4.5', command: '.mv', color: 0x5865F2, detect: [/MoonVeil/i, /Moonveil/i, /MV_[A-Z_]+/i] },
   { id: 'luaobf-good', label: 'LuaObfuscator Chaotic Good', command: '.luaobf good', color: 0x57F287, detect: [/Chaotic\s*Good/i, /LuaObfuscator/i, /luaobfuscator/i, /v7\s*\(/i] },
   { id: 'luaobf-evil', label: 'LuaObfuscator Chaotic Evil', command: '.luaobf evil', color: 0xED4245, detect: [/LOL![0-9A-Fa-f2-9Q]+/i, /Chaotic\s*Evil/i, /luaobfuscator/i] },

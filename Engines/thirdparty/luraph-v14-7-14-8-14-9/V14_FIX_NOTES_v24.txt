@@ -1,0 +1,8 @@
+v24
+
+- Recognize AttributeChanged as another Luraph v14.x Roblox environment probe family.
+- Strip repeated empty AttributeChanged Connect/Disconnect suites on game, workspace, temporary folders, HttpService and RunService.
+- Treat AttributeChanged-only recovery as probe-only rather than valid payload source.
+- Probe-only root recovery scans up to 24 alternate ranked roots instead of only 8.
+- Normal isolated user AttributeChanged handlers are preserved because stripping requires a strong multi-probe fingerprint.
+- Applied to v14.7, v14.8 and v14.9.

@@ -29,6 +29,9 @@ RUN git clone --filter=blob:none --depth 1 --branch ${LUAU_VERSION} https://gith
     && chmod +x Deobfuscator/bin/luau Deobfuscator/bin/luau-ast \
     && test -x Deobfuscator/bin/luau \
     && test -x Deobfuscator/bin/luau-ast \
+    && mkdir -p Engines/thirdparty/luraph-v14-7-14-8-14-9/bin \
+    && cp Deobfuscator/bin/luau-ast Engines/thirdparty/luraph-v14-7-14-8-14-9/bin/luau-ast \
+    && chmod +x Engines/thirdparty/luraph-v14-7-14-8-14-9/bin/luau Engines/thirdparty/luraph-v14-7-14-8-14-9/bin/luau-ast \
     && rm -rf /tmp/luau
 
 RUN npm install --omit=dev

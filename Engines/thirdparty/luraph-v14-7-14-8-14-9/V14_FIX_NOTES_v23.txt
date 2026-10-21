@@ -1,0 +1,21 @@
+Luraph v14.x deobfuscator v23
+
+Completeness / large-script recovery:
+
+- Fixes a bad fallback policy that could reduce a large devirtualized script to
+  only the print()/warn() calls observed during tracing.
+- A quick walk that converges with unresolved VM states no longer aborts the
+  static lifter immediately. It escalates to a full salvage structuring pass.
+- Salvage mode keeps recovered assignments, branches, loops, closures, calls,
+  table accesses, and surrounding function structure around unresolved states.
+- Removed the "static output is much larger than the trace" heuristic. A short
+  behavior trace is not treated as a substitute for a richer static program.
+- Compact trace-assisted reconstruction is now used only when the static result
+  is genuinely insubstantial/broken or still Luraph bootstrap scaffolding.
+- Alternate-root scanning also uses the same salvage mode when required.
+- Existing v22 AncestryChanged/ChildRemoved/DescendantRemoving probe stripping
+  remains enabled.
+
+Important: an actually unsupported VM instruction is still emitted loudly as a
+specific devirt error state rather than silently deleting the rest of the
+program. This avoids convincing-looking but incomplete output.

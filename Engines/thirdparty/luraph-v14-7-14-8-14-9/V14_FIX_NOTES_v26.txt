@@ -1,0 +1,11 @@
+v26 - v14.x table-bound VM closure capture
+
+- v14.7 / v14.8 / v14.9 only.
+- Fixes layouts where the generated interpreter closure is assigned directly
+  into a runtime table slot, e.g. `state[59] = function(...) ... end`, instead
+  of first being stored in a plain local.
+- The mapper can now use simple local/global/table/property lvalues as closure
+  references when installing __PF / __PK capture hooks.
+- This prevents the failure mode where the dispatcher is detected but the
+  mapper reports zero closure makers, leaving the proto dump incomplete.
+- Existing v25 root screening, partial salvage, and probe stripping are kept.

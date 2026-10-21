@@ -15,3 +15,10 @@ Render's free Web Service can spin down after 15 minutes without incoming HTTP t
 ## Secrets
 
 Never commit `.env` files, Discord tokens, or API keys. Keep secrets in Render's Environment settings.
+
+
+## Added recovery engines
+
+- `.gv11d` — Goofyscator V11 BETA-1. The `.deobf` selector includes it as a primary option. It reports failure rather than presenting diagnostic JSON as recovered Lua.
+- `.lph151` — Luraph V15.1, installed as a separate backend and kept distinct from Luraph V15 Version 1 / Version 2.
+- Goofyscator native Luau compile validation is skipped only when its bundled Linux runtime is unavailable; recovery remains best-effort and output should be reviewed.
