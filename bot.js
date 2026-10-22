@@ -77,8 +77,8 @@ function actionVerb(kind) {
 }
 
 function makeHeader(obfuscator, kind = 'deobfuscate', date = new Date()) {
-  if (kind === 'deobfuscate') return '-- This file was deobfuscated by Skulx Cli';
   const time = date.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, ' UTC');
+  if (kind === 'deobfuscate') return `-- This file was deobfuscated by Skulx Cli | ${obfuscator || 'Unknown Obfuscator'} | ${time}`;
   return `-- This file was ${actionVerb(kind)} by Skulx Cli | ${obfuscator} | ${time}`;
 }
 
@@ -811,29 +811,24 @@ function lphRows(guild, prefix = 'lphver') {
       makeButton(guild, `${prefix}:luraph149`, 'Luraph V14.9', ButtonStyle.Secondary, 'luraph'),
     ),
     new ActionRowBuilder().addComponents(
-      makeButton(guild, `${prefix}:luraph151`, 'Luraph V15.1', ButtonStyle.Primary, 'luraph'),
+      makeButton(guild, `${prefix}:luraph151`, 'Luraph V15.1', ButtonStyle.Secondary, 'luraph'),
     )
   ];
 }
 function deobfRows(guild) {
-  const specs = [
-    ['goofyscator-v11', 'Goofyscator V11', 'goofy'],
-    ['luraph151', 'Luraph V15.1', 'luraph'],
-    ['luraph15', 'Luraph V15 • V1', 'luraph'],
-    ['luraph15v2', 'Luraph V15 • V2', 'luraph'],
-    ['luraph147', 'Luraph V14.7', 'luraph'],
-    ['luraph148', 'Luraph V14.8', 'luraph'],
-    ['luraph149', 'Luraph V14.9', 'luraph'],
-  ];
+  const specs = ENGINES
+    .filter(engine => engine.id !== 'flowauth')
+    .map(engine => [engine.id, engine.label, engineEmojiKey(engine.id)]);
   const rows = [];
   for (let i = 0; i < specs.length; i += 5) {
     const row = new ActionRowBuilder();
-    for (const [id, label, emoji] of specs.slice(i, i + 5)) row.addComponents(makeButton(guild, `deobf:${id}`, label, ButtonStyle.Secondary, emoji));
+    for (const [id, label, emoji] of specs.slice(i, i + 5)) {
+      row.addComponents(makeButton(guild, `deobf:${id}`, label, ButtonStyle.Secondary, emoji));
+    }
     rows.push(row);
   }
   return rows;
 }
-
 
 async function handleDeobf(message, args) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'deobf-select-'));
@@ -1093,6 +1088,9 @@ async function handleDirect(message, args, id) {
 }
 
 client.once('ready', () => console.log(`Logged in as ${client.user.tag}`));
+client.on('error', error => console.error('[discord-client-error]', error));
+process.on('unhandledRejection', reason => console.error('[unhandled-rejection]', reason));
+process.on('uncaughtException', error => { console.error('[uncaught-exception]', error); process.exit(1); });
 client.on('interactionCreate', async interaction => {
   if (!interaction.isButton()) return;
   const [kind, id] = interaction.customId.split(':');
@@ -1172,6 +1170,7 @@ client.on('interactionCreate', async interaction => {
 
 client.on('messageCreate', async message => {
   if (message.author.bot || !message.content.startsWith(PREFIX)) return;
+  console.log(`[command] ${message.guild?.id || 'DM'} #${message.channel?.id || 'unknown'} ${message.author.id}: ${message.content.slice(0, 100)}`);
   const parts = message.content.slice(PREFIX.length).trim().split(/\s+/); const command = (parts.shift() || '').toLowerCase();
   try {
     if (command === 'help') await message.reply({ embeds: [helpEmbed(message.guild)] });
