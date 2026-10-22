@@ -693,11 +693,13 @@ function decodeDeep(text) {
 async function sourceForAction(message, args, dir) {
   const source = await acquireInput(message, args, dir);
   if (source) return source;
-  const text = args.join(' ') || allSourceText(message, await repliedMessage(message));
-  if (text.trim()) {
-    const input = path.join(dir, 'inline.lua'); await fs.writeFile(input, text, 'utf8'); return { input, label: 'inline/replied source' };
-  }
-  return null;
+  const argText = args.join(' ').trim();
+  const replied = await repliedMessage(message);
+  const text = argText || (replied && !attachmentFrom(replied) ? String(replied.content || '').trim() : '');
+  if (!text) return null;
+  const input = path.join(dir, 'inline.lua');
+  await fs.writeFile(input, text, 'utf8');
+  return { input, label: argText ? 'inline source' : 'replied source' };
 }
 
 // Engine runners consume source code, not file-format metadata. Discord attachments
