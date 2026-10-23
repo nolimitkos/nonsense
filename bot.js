@@ -1087,10 +1087,54 @@ async function handleDirect(message, args, id) {
   catch (e) { console.error(e); await message.reply(`${E(message.guild).failed} ${String(e.message || e).slice(-3500)}`).catch(() => {}); }
 }
 
-client.once('ready', () => console.log(`Logged in as ${client.user.tag}`));
-client.on('error', error => console.error('[discord-client-error]', error));
+client.once('ready', () => {
+  console.log(`[discord-ready] Logged in as ${client.user.tag}`);
+  console.log('[discord-ready] Connected guild count:', client.guilds.cache.size);
+});
+
+client.on('debug', message => {
+  console.log('[discord-debug]', message);
+});
+
+client.on('warn', message => {
+  console.warn('[discord-warning]', message);
+});
+
+client.on('error', error => {
+  console.error('[discord-client-error]', error);
+});
+
+client.on('shardReady', shardId => {
+  console.log('[discord-shard-ready]', shardId);
+});
+
+client.on('shardDisconnect', (event, shardId) => {
+  console.error('[discord-disconnect]', {
+    shardId,
+    code: event?.code,
+    reason: event?.reason || 'No reason provided',
+    wasClean: event?.wasClean
+  });
+});
+
+client.on('shardError', (error, shardId) => {
+  console.error('[discord-shard-error]', { shardId, message: error?.message, code: error?.code });
+});
+
+client.on('shardReconnecting', shardId => {
+  console.warn('[discord-reconnecting]', shardId);
+});
+
+client.on('shardResume', (shardId, replayedEvents) => {
+  console.log('[discord-shard-resumed]', { shardId, replayedEvents });
+});
+
 process.on('unhandledRejection', reason => console.error('[unhandled-rejection]', reason));
-process.on('uncaughtException', error => { console.error('[uncaught-exception]', error); process.exit(1); });
+process.on('uncaughtException', error => {
+  console.error('[uncaught-exception]', error);
+  process.exit(1);
+});
+process.on('warning', warning => console.warn('[node-warning]', warning));
 client.on('interactionCreate', async interaction => {
   if (!interaction.isButton()) return;
   const [kind, id] = interaction.customId.split(':');
@@ -1256,12 +1300,21 @@ healthServer.listen(PORT, '0.0.0.0', () => {
 });
 
 console.log('[startup] bot.js reached login section');
+console.log('[startup] Node.js version:', process.version);
+console.log('[startup] discord.js version:', require('discord.js').version || 'unknown');
 console.log('[startup] DISCORD_TOKEN exists:', Boolean(TOKEN));
+console.log('[startup] Client ready before login:', client.isReady());
 
 client.login(TOKEN)
   .then(() => {
-    console.log('[startup] Discord login request completed');
+    console.log('[startup] Discord login request completed; waiting for ready event');
   })
   .catch(error => {
-    console.error('[discord-login-failed]', error);
+    console.error('[discord-login-failed]', {
+      name: error?.name,
+      message: error?.message,
+      code: error?.code,
+      status: error?.status,
+      stack: error?.stack
+    });
   });
