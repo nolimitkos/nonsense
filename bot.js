@@ -1220,8 +1220,20 @@ client.on('messageCreate', async message => {
   console.log(`[command:start] id=${commandId} guild=${message.guild?.id || 'DM'} channel=${message.channel?.id || 'unknown'} user=${message.author.id} command=${command || '(empty)'}`);
   try {
     if (command === 'ping') {
-      const sent = await message.reply('Pong.');
-      console.log(`[command:success] id=${commandId} reply=${sent.id}`);
+      console.log(`[command:ping] id=${commandId} attempting channel reply`);
+      try {
+        const sent = await message.channel.send({ content: 'Pong.' });
+        console.log(`[command:ping-success] id=${commandId} reply=${sent.id} channel=${sent.channelId}`);
+      } catch (pingError) {
+        console.error(`[command:ping-failed] id=${commandId}`, {
+          name: pingError?.name,
+          message: pingError?.message,
+          code: pingError?.code,
+          status: pingError?.status,
+          stack: pingError?.stack
+        });
+        throw pingError;
+      }
     }
     else if (command === 'help') {
       console.log(`[command:help] id=${commandId} building help embed`);
