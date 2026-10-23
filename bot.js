@@ -1255,4 +1255,6 @@ healthServer.listen(PORT, '0.0.0.0', () => {
   console.log(`HTTP health server listening on port ${PORT}`);
 });
 
-client.login(TOKEN);
+client.login(TOKEN).catch(error => {
+  console.error('[discord-login-failed]', error);
+});
