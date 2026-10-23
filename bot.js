@@ -1214,10 +1214,22 @@ client.on('interactionCreate', async interaction => {
 
 client.on('messageCreate', async message => {
   if (message.author.bot || !message.content.startsWith(PREFIX)) return;
-  console.log(`[command] ${message.guild?.id || 'DM'} #${message.channel?.id || 'unknown'} ${message.author.id}: ${message.content.slice(0, 100)}`);
-  const parts = message.content.slice(PREFIX.length).trim().split(/\s+/); const command = (parts.shift() || '').toLowerCase();
+  const parts = message.content.slice(PREFIX.length).trim().split(/\s+/);
+  const command = (parts.shift() || '').toLowerCase();
+  const commandId = `${message.id}:${command || 'empty'}`;
+  console.log(`[command:start] id=${commandId} guild=${message.guild?.id || 'DM'} channel=${message.channel?.id || 'unknown'} user=${message.author.id} command=${command || '(empty)'}`);
   try {
-    if (command === 'help') await message.reply({ embeds: [helpEmbed(message.guild)] });
+    if (command === 'ping') {
+      const sent = await message.reply('Pong.');
+      console.log(`[command:success] id=${commandId} reply=${sent.id}`);
+    }
+    else if (command === 'help') {
+      console.log(`[command:help] id=${commandId} building help embed`);
+      const embed = helpEmbed(message.guild);
+      console.log(`[command:help] id=${commandId} embed built; sending reply`);
+      const sent = await message.reply({ embeds: [embed] });
+      console.log(`[command:success] id=${commandId} reply=${sent.id}`);
+    }
     else if (command === 'deobf') await handleDeobf(message, parts);
     else if (command === 'detect') await handleDetect(message, parts);
     else if (command === 'game' || command === 'gamedetect' || command === 'gamename') await handleGameDetect(message, parts);
@@ -1274,7 +1286,29 @@ client.on('messageCreate', async message => {
     else if (command === 'decode') await handleDecode(message, parts);
     else if (command === 'beautify' || command === 'beutify') await handleBeautify(message, parts);
     else if (command === 'rename') await handleRename(message, parts);
-  } catch (e) { console.error(e); await message.reply(`${E(message.guild).error} Unexpected bot error.`).catch(() => {}); }
+    else console.log(`[command:unknown] id=${commandId} command=${command || '(empty)'}`);
+    console.log(`[command:complete] id=${commandId}`);
+  } catch (e) {
+    console.error(`[command:error] id=${commandId}`, {
+      name: e?.name,
+      message: e?.message,
+      code: e?.code,
+      status: e?.status,
+      stack: e?.stack
+    });
+    try {
+      const fallback = await message.reply(`${E(message.guild).error} Unexpected bot error.`);
+      console.log(`[command:fallback-success] id=${commandId} reply=${fallback.id}`);
+    } catch (replyError) {
+      console.error(`[command:fallback-failed] id=${commandId}`, {
+        name: replyError?.name,
+        message: replyError?.message,
+        code: replyError?.code,
+        status: replyError?.status,
+        stack: replyError?.stack
+      });
+    }
+  }
 });
 
 setInterval(() => {
@@ -1305,16 +1339,49 @@ console.log('[startup] discord.js version:', require('discord.js').version || 'u
 console.log('[startup] DISCORD_TOKEN exists:', Boolean(TOKEN));
 console.log('[startup] Client ready before login:', client.isReady());
 
-client.login(TOKEN)
-  .then(() => {
-    console.log('[startup] Discord login request completed; waiting for ready event');
-  })
-  .catch(error => {
-    console.error('[discord-login-failed]', {
-      name: error?.name,
-      message: error?.message,
-      code: error?.code,
-      status: error?.status,
-      stack: error?.stack
-    });
+let loginAttempt = 0;
+let loginInProgress = false;
+let retryTimer = null;
+
+function scheduleDiscordLoginRetry(error) {
+  loginInProgress = false;
+  loginAttempt += 1;
+  const delay = Math.min(60_000, 5_000 * (2 ** Math.min(loginAttempt - 1, 4)));
+  console.error('[discord-login-failed]', {
+    attempt: loginAttempt,
+    retryInMs: delay,
+    name: error?.name,
+    message: error?.message,
+    code: error?.code,
+    status: error?.status
   });
+  if (retryTimer) clearTimeout(retryTimer);
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    loginDiscord();
+  }, delay);
+  retryTimer.unref?.();
+}
+
+function loginDiscord() {
+  if (loginInProgress || client.isReady()) return;
+  loginInProgress = true;
+  console.log('[discord-login] Attempting Discord login; attempt:', loginAttempt + 1);
+  client.login(TOKEN)
+    .then(() => {
+      loginInProgress = false;
+      loginAttempt = 0;
+      console.log('[discord-login] Login request accepted; waiting for ready event');
+    })
+    .catch(scheduleDiscordLoginRetry);
+}
+
+client.on('ready', () => {
+  loginAttempt = 0;
+  loginInProgress = false;
+  if (retryTimer) clearTimeout(retryTimer);
+  retryTimer = null;
+  console.log('[discord-ready] Bot is online as', client.user.tag);
+});
+
+loginDiscord();
